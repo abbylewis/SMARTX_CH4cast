@@ -146,12 +146,13 @@ gefs_metadata <- function() {
 #' Note that gefs v11 has only 20 ensemble members, 16 day horizons, and
 #' all at 6 hour intervals.  gefs v11 also has fewer bands.
 #' export
-gefs_bands <- function(zero_horizon = FALSE,
+gefs_bands <- function(date,
+                       zero_horizon = FALSE,
                        gefs_version = Sys.getenv("GEFS_VERSION", "v12")) {
   meta <- gefs_metadata()
-
+  message(date)
   # ACTUALLY, v11 adopts v12 band numbering on 2018-07-19, not 2018-07-27
-  if(gefs_version == "v11.1") gefs_version <- "v12"
+  if(gefs_version == "v11.1" | date > as.Date("2018-07-19")) gefs_version <- "v12"
 
   if(zero_horizon && gefs_version == "v12"){
     meta <- meta[!is.na(meta$horiz0_number), ]
@@ -172,11 +173,13 @@ gefs_bands <- function(zero_horizon = FALSE,
   bands
 }
 
-gefs_all_bands <- function(zero_horizon = FALSE,
+gefs_all_bands <- function(date,
+                           zero_horizon = FALSE,
                            gefs_version = Sys.getenv("GEFS_VERSION", "v12")){
 
   # ACTUALLY, v11 adopts v12 band numbering on 2018-07-19, not 2018-07-27
   if(gefs_version == "v11.1") gefs_version <- "v12"
+  if(date > as.Date("2018-07-19") & gefs_version == "v11") gefs_version <- "v12"
 
   if(zero_horizon){
     out <- switch(gefs_version,

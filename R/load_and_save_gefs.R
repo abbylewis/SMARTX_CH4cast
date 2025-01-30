@@ -5,6 +5,10 @@ source(here::here("R", "megacube_extract.R"))
 source(here::here("R", "gefs-methods.R"))
 
 load_and_save_gefs <- function(date){
+  if(date <= as.Date("2018-07-27")){Sys.setenv("GEFS_VERSION"="v11")}
+  if(date > as.Date("2018-07-27") & date <= as.Date("2020-09-22")){Sys.setenv("GEFS_VERSION"="v11.1")}
+  if(date > as.Date("2020-09-22")){Sys.setenv("GEFS_VERSION"="v12")}
+  
   sites <- sf::st_as_sf(read.csv(here::here("Raw_data","site_gefs.csv")),
                                 coords=c("longitude", "latitude"),
                                 crs = 4326) |>
@@ -12,13 +16,13 @@ load_and_save_gefs <- function(date){
     sf::st_transform(crs = sf::st_crs(grib_wkt()))
   
   raw <- megacube_extract(dates = date - days(1),
-                        ensemble = gefs_ensemble(),
-                        bands = gefs_bands(),
-                        sites = sites,
-                        horizon = gefs_horizon(),
-                        all_bands = gefs_all_bands(),
-                        url_builder = gefs_urls,
-                        cycles =  c("00"))
+                          ensemble = gefs_ensemble(),
+                          bands = gefs_bands(date),
+                          sites = sites,
+                          horizon = gefs_horizon(),
+                          all_bands = gefs_all_bands(date),
+                          url_builder = gefs_urls,
+                          cycles =  c("00"))
   
   formatted <- raw %>%
     mutate(model_id = "noaa_gefs",
@@ -63,12 +67,14 @@ load_and_save_gefs <- function(date){
   }
 }
 
-#target <- read_csv(here::here("L1_target.csv"), show_col_types = F)
-#date <- seq(min(target$datetime), Sys.Date() - 1L, by = "1 day")
-#processed <- as.Date(str_extract(list.files(here::here("met_downloads")), "[0-9].*[0-9]"))
-#date <- date[!date %in% processed]
-##Process all, breaking into chucks to account for system limitations
-#comb <- date %>%
-#  split(cut(date, 135, labels = FALSE)) %>% #10 at a time
-#  map(load_and_save_gefs) %>%
-#  bind_rows()
+target <- read_csv(here::here("L1_target.csv"), show_col_types = F)
+date <- unique(target$datetime)
+processed <- as.Date(str_extract(list.files(here::here("met_downloads")), "[0-9].*[0-9]"))
+date <- date[!date %in% processed]
+date <- as.Date(date[year(date) >= 2017])
+date <- date[order(date)]
+
+#Process all
+comb <- date %>%
+  map(load_and_save_gefs) %>%
+  bind_rows()

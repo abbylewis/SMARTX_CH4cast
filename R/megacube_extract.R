@@ -3,14 +3,16 @@
 
 megacube_extract <- function(dates = Sys.Date() - 1L,
                              ensemble = gefs_ensemble(),
-                             bands = gefs_bands(),
+                             bands = gefs_bands(date = date),
                              sites,
                              horizon = gefs_horizon(),
-                             all_bands = gefs_all_bands(),
+                             all_bands = gefs_all_bands(date = date),
                              url_builder = gefs_urls,
                              cycles =  c("00")) { #, "06", "12", "18")) {
+  # v11 goes from 2017-01-01 to 2020-09-22.  BUT
+  # on 2018-07-27, file name and url structure shift slightly
+  
   #only cycle 00 has 35-day forecasts
-
   vars <- names(bands)
   sites_df <- sites |>
     tibble::as_tibble() |>

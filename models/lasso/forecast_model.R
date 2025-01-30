@@ -8,6 +8,7 @@ library(glmnet)
 
 #### Step 1: Set model specifications
 model_id <- "lasso"
+model_timestamp <- "P1D"
 all_forecast_vars <- read_csv(here::here("forecast_variables.csv"), show_col_types = FALSE)
 model_variables <- all_forecast_vars$`"official" targets name`
 # Global parameters used in generate_tg_forecast()
@@ -38,7 +39,9 @@ forecast_model <- function(site,
   # Merge in past NOAA data into the targets file, matching by date.
   site_target <- site_target_raw |>
     tidyr::pivot_wider(names_from = "variable", values_from = "observation") |>
-    dplyr::left_join(noaa_past_mean, 
+    dplyr::left_join(noaa_past_mean %>%
+                       filter(site_id == "gcrew") %>%
+                       select(-site_id), 
                      by = c("datetime")) %>%
     na.omit()
   
