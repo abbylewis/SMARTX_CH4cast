@@ -27,9 +27,10 @@ generate_target <- function(){
            Date = as.Date(Date, format = "%m/%d/%Y"),
            CH4_slope = flux.CH4) %>% #Need to figure out units
     rename(site_id = Plot,
-           datetime = Date) %>%
-    select(project_id, site_id, datetime, duration, CH4_slope) %>%
-    pivot_longer(cols = CH4_slope, 
+           datetime = Date,
+           CH4_slope_umol_m2_d = CH4_slope) %>%
+    select(project_id, site_id, datetime, duration, CH4_slope_umol_m2_d) %>%
+    pivot_longer(cols = CH4_slope_umol_m2_d, 
                  names_to = "variable", values_to = "observation") %>%
     mutate(datetime = as.Date(datetime)) %>%
     filter(!is.na(observation)) %>%
