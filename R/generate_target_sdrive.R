@@ -25,7 +25,8 @@ generate_target_sdrive <- function(path){
   target <- data %>%
     mutate(project_id = "smartx",
            duration = "P1M",
-           Date = as.Date(Date, format = "%m/%d/%Y"),
+           Date = parse_date_time(Date, 
+                                  orders = c("m d Y", "Y m d")),
            CH4_slope_umol_m2_d = as.numeric(flux.CH4)) %>% #Need to figure out units
     rename(site_id = Plot,
            datetime = Date) %>%
