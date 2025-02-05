@@ -18,7 +18,7 @@ generate_target_sdrive <- function(path){
   data <- files %>%
     map(read_csv, col_types = cols(.default = col_character())) %>%
     bind_rows() %>%
-    #filter(is.na(Light) | Light %in% c("Light", "Full")) %>%
+    filter(is.na(Light) | Light %in% c("Dark")) %>%
     select(Date, Plot, flux.CH4) # These are the only columns that are in all files rn
   
   #Format as target data
@@ -34,7 +34,8 @@ generate_target_sdrive <- function(path){
     pivot_longer(cols = CH4_slope_umol_m2_d, 
                  names_to = "variable", values_to = "observation") %>%
     mutate(datetime = as.Date(datetime)) %>%
-    filter(!is.na(observation)) %>%
+    filter(!is.na(observation),
+           !is.na(datetime)) %>%
     group_by(project_id, site_id, datetime, duration, variable) %>%
     summarise(observation = median(observation, na.rm = TRUE), 
               n = n(),
