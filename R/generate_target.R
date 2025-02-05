@@ -14,10 +14,11 @@ library(tidyverse)
 #' @examples
 generate_target <- function(){
   files <- list.files(here::here("Raw_data", "SMARTX_fluxes"), full.names = TRUE)
+  
   data <- files %>%
-    map(read_csv) %>%
+    map(read_csv, show_col_types = F) %>%
     bind_rows() %>%
-    filter(is.na(Light) | Light %in% c("Light", "Full")) %>%
+    #filter(is.na(Light) | Light %in% c("Light", "Full")) %>%
     select(Date, Plot, flux.CH4) # These are the only columns that are in all files rn
   
   #Format as target data
@@ -25,10 +26,9 @@ generate_target <- function(){
     mutate(project_id = "smartx",
            duration = "P1M",
            Date = as.Date(Date, format = "%m/%d/%Y"),
-           CH4_slope = flux.CH4) %>% #Need to figure out units
+           CH4_slope_umol_m2_d = flux.CH4) %>% #Need to figure out units
     rename(site_id = Plot,
-           datetime = Date,
-           CH4_slope_umol_m2_d = CH4_slope) %>%
+           datetime = Date) %>%
     select(project_id, site_id, datetime, duration, CH4_slope_umol_m2_d) %>%
     pivot_longer(cols = CH4_slope_umol_m2_d, 
                  names_to = "variable", values_to = "observation") %>%
