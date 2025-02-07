@@ -20,7 +20,7 @@ message(paste0("Running EDM. Sites are ", sites))
 forecast_model <- function(site,
                            var,
                            noaa_past_mean = NULL,
-                           noaa_future_daily = NULL,
+                           noaa_future_monthly = NULL,
                            target,
                            horiz,
                            step,
@@ -40,30 +40,36 @@ forecast_model <- function(site,
   site_target_raw <- site_target_raw |>
     tidyr::pivot_wider(names_from = "variable", values_from = "observation")
   
-  if(!var %in% names(site_target_raw) || sum(!is.na(site_target_raw[var])) == 0){
-    message(paste0("No target observations at site ", site, 
+  if(!var %in% names(site_target_raw) || sum(!is.na(site_target_raw[var])) < 5){
+    message(paste0("Insufficient target observations at site ", site, 
                    ". Skipping forecasts at this site."))
     return()
   }
   
   # Fit rEDM model
   site_target = site_target_raw |>
-    complete(datetime = full_seq(datetime, 1), site_id) %>%
+    complete(datetime = seq.Date(from = min(datetime), 
+                                 to = max(datetime),
+                                 by = "month"), 
+             site_id) |>
     #filter(!(datetime > "2022-10-13" & datetime <= "2023-06-27")) %>%
     arrange(datetime)
   
+  dif_years = year(forecast_date) - year(max(site_target$datetime))
+  h = month(forecast_date) - month(max(site_target$datetime)) +
+    horiz +
+    12*dif_years
   n <- nrow(site_target)
-  h <- (forecast_date-max(site_target$datetime))+horiz
   lib <- c(1, n) # use all data for training (why not)
   
   dims <- EmbedDimension(dataFrame = data.frame(site_target %>% select(-site_id)),
-                         columns = "CH4_slope_umol_m2_day", target = "CH4_slope_umol_m2_day", 
+                         columns = "CH4_slope_umol_m2_d", target = "CH4_slope_umol_m2_d", 
                          lib = lib, pred = lib,  # which portions of the data to train and predict
                          maxE = 5)
   opt_dim <- which.max(dims$rho)
   
   fits <- rEDM::SMap(dataFrame = data.frame(site_target %>% select(-site_id)),
-                       columns = "CH4_slope_umol_m2_day", target = "CH4_slope_umol_m2_day", 
+                       columns = "CH4_slope_umol_m2_d", target = "CH4_slope_umol_m2_d", 
                        lib = lib, pred = lib, # which portions of the data to train and predict
                        E = opt_dim)$predictions
   
@@ -73,18 +79,18 @@ forecast_model <- function(site,
     geom_line(aes(y = Predictions), color = "red")
   
   output <- rEDM::SMap(dataFrame = data.frame(site_target %>% select(-site_id)),
-                          columns = "CH4_slope_umol_m2_day", target = "CH4_slope_umol_m2_day", 
+                          columns = "CH4_slope_umol_m2_d", target = "CH4_slope_umol_m2_d", 
                           lib = lib, pred = lib, # which portions of the data to train and predict
                           E = opt_dim, generateSteps = h)$predictions
   
   #generateSteps will override prediction interval
   #See more here: https://sugiharalab.github.io/EDM_Documentation/simplex_/
 
-  forecast = data.frame(project_id = "gcrew",
+  forecast = data.frame(project_id = "smartx",
                         model_id = model_id,
-                        datetime = output$datetime,
+                        datetime = as.Date(paste(year(output$datetime), month(output$datetime), "01", sep = "-")),
                         reference_datetime = forecast_date,
-                        duration = "P1D",
+                        duration = "P1M",
                         site_id = site,
                         family = "normal",
                         variable = var,

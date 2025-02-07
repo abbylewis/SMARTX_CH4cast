@@ -87,10 +87,10 @@ forecast_model <- function(site,
     
     # Format results to EFI standard
     forecast <- forecast |>
-      mutate(project_id = "gcrew",
+      mutate(project_id = "smartx",
              model_id = model_id,
              reference_datetime = forecast_date,
-             duration = "P1D",
+             duration = "P1M",
              family = "normal") |>
       select(project_id, model_id, datetime, reference_datetime, duration,
              site_id, family, parameter, variable, prediction)

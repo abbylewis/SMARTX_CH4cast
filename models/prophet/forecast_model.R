@@ -22,7 +22,7 @@ noaa = F #Whether the model requires NOAA data
 forecast_model <- function(site,
                            var,
                            noaa_past_mean = NULL,
-                           noaa_future_daily = NULL,
+                           noaa_future_monthly = NULL,
                            target,
                            horiz,
                            step,
@@ -42,16 +42,22 @@ forecast_model <- function(site,
   site_target_raw <- site_target_raw |>
     tidyr::pivot_wider(names_from = "variable", values_from = "observation")
   
-  if(!var %in% names(site_target_raw) || sum(!is.na(site_target_raw[var])) == 0){
-    message(paste0("No target observations at site ", site, 
+  if(!var %in% names(site_target_raw) || sum(!is.na(site_target_raw[var])) < 5){
+    message(paste0("Insufficient target observations at site ", site, 
                    ". Skipping forecasts at this site."))
     return()
   }
 
   site_target = site_target_raw |>
-    complete(datetime = full_seq(datetime, 1), site_id)
-
-  h = as.numeric(forecast_date - max(site_target$datetime)+horiz)
+    complete(datetime = seq.Date(from = min(datetime), 
+                                 to = max(datetime),
+                                 by = "month"), 
+             site_id)
+  
+  dif_years = year(forecast_date) - year(max(site_target$datetime))
+  h = month(forecast_date) - month(max(site_target$datetime)) +
+    horiz +
+    12*dif_years
 
   # Fit prophet model
   df <- site_target %>%
@@ -65,11 +71,11 @@ forecast_model <- function(site,
            sd_lower = yhat - yhat_lower,
            sigma = (sd_upper + sd_lower)/2)
   
-  forecast = data.frame(project_id = "gcrew",
+  forecast = data.frame(project_id = "smartx",
                         model_id = model_id,
-                        datetime = (1:h)*step+max(site_target$datetime),
+                        datetime = max(site_target$datetime) + months(1:h),
                         reference_datetime = forecast_date,
-                        duration = "P1D",
+                        duration = "P1M",
                         site_id = site,
                         family = "normal",
                         variable = var,
