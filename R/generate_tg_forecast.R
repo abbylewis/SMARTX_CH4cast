@@ -15,12 +15,15 @@ generate_tg_forecast <- function(forecast_date,
                                  plot = F,
                                  use_ref_year = T) {
   
+  forecast_date <- as.Date(forecast_date)
+  
   ### Step 1: Download latest target data
   target <- read_csv(here::here("L1_target.csv"), show_col_types = F) %>%
     dplyr::mutate(datetime = as.Date(datetime),
                   datetime = as.Date(paste(year(datetime), month(datetime), "01", sep = "-"))) %>%
     group_by(site_id, datetime, project_id, duration, variable) %>%
-    summarize(observation = mean(observation, na.rm = T), .groups = "drop")
+    summarize(observation = mean(observation, na.rm = T), .groups = "drop") %>%
+    filter(datetime <= forecast_date)
   
   ### Step 2: Set forecast specifications
   if(sites == "all"){
@@ -30,7 +33,6 @@ generate_tg_forecast <- function(forecast_date,
   step = 1
   
   ### Step 3: Get NOAA driver data
-  forecast_date <- as.Date(forecast_date)
   
   #Load forecasts
   noaa_future_monthly <- read_csv(here::here("met_downloads",
@@ -91,7 +93,7 @@ generate_tg_forecast <- function(forecast_date,
   
   # Write forecast to disk
   if(save){
-    forecast_file <- paste0(here::here("outputs", paste0("daily-", forecast_date, "-", model_id, ".csv.gz")))
+    forecast_file <- paste0(here::here("outputs", paste0("monthly-", forecast_date, "-", model_id, ".csv.gz")))
     write_csv(forecast, forecast_file)
   }
   

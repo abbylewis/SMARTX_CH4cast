@@ -23,7 +23,7 @@ bootstrap = F
 forecast_model <- function(site,
                            var,
                            noaa_past_mean = NULL,
-                           noaa_future_daily = NULL,
+                           noaa_future_monthly = NULL,
                            target,
                            horiz,
                            step,
@@ -48,27 +48,34 @@ forecast_model <- function(site,
   site_target_raw <- site_target_raw |>
     tidyr::pivot_wider(names_from = "variable", values_from = "observation")
   
-  if(!var %in% names(site_target_raw) || sum(!is.na(site_target_raw[var])) == 0){
+  if(!var %in% names(site_target_raw) || sum(!is.na(site_target_raw[var])) < 5){
     message(paste0("No target observations at site ", site, 
                    ". Skipping forecasts at this site."))
     return()
   }
 
   site_target = site_target_raw |>
-    complete(datetime = full_seq(datetime, 1), site_id)
-
-  h = as.numeric(forecast_date - max(site_target$datetime)+horiz)
+    complete(datetime = seq.Date(from = min(datetime), 
+                                 to = max(datetime),
+                                 by = "month"), 
+             site_id) %>%
+    mutate(index = row_number() - 1) 
+  
+  dif_years = year(forecast_date) - year(max(site_target$datetime))
+  h = month(forecast_date) - month(max(site_target$datetime)) +
+    horiz +
+    12*dif_years
 
   # Fit RW model for each horizon individually
   fit_at_hi <- function(hi){
     RW_model <- site_target %>%
       mutate(var_unnamed = get(!!var)) %>%
-      tsibble::as_tsibble(index = datetime, key = "site_id") %>%
+      tsibble::as_tsibble(index = index, key = "site_id") %>%
       fabletools::model(RW = fable::RW(var_unnamed~ lag(hi)))
     
     forecast <- RW_model %>% 
       fabletools::forecast(h = hi) %>%
-      filter(datetime == max(site_target$datetime) + hi)
+      filter(index == max(site_target$index) + hi)
     
     # extract parameters
     parameters <- distributional::parameters(forecast$var_unnamed)
@@ -77,7 +84,8 @@ forecast_model <- function(site,
   }
   
   fits <- purrr::pmap(list(1:h), fit_at_hi) |> 
-    bind_rows()
+    bind_rows() %>%
+    mutate(datetime = min(site_target$datetime) + months(index))
   
   # make right format
   forecast <- fits |>
@@ -88,8 +96,8 @@ forecast_model <- function(site,
            family = 'normal',
            reference_datetime=forecast_date,
            variable = var,
-           project_id = "gcrew",
-           duration = "P1D") |>
+           project_id = "smartx",
+           duration = "P1M") |>
     select(any_of(c("project_id", "model_id", "datetime", "reference_datetime",
                     "duration", "site_id", "family", "parameter", 
                     "variable", "prediction"))) |>

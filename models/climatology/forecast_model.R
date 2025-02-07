@@ -1,4 +1,4 @@
-# climatology model
+# climate window
 # written by ASL
 
 
@@ -20,7 +20,7 @@ noaa = F #Whether the model requires NOAA data
 forecast_model <- function(site,
                            var,
                            noaa_past_mean = NULL,
-                           noaa_future_daily = NULL,
+                           noaa_future_monthly = NULL,
                            target,
                            horiz,
                            step,
@@ -28,53 +28,59 @@ forecast_model <- function(site,
   
   message(paste0("Running site: ", site))
   
-  # Format site data for arima model
+  # Format site data for climatology model
   site_target_raw <- target |>
     dplyr::mutate(datetime = as.Date(datetime)) |>
     dplyr::select(datetime, site_id, variable, observation) |>
     dplyr::filter(variable == var, 
-                  site_id == site,
-                  datetime < forecast_date) 
+                  site_id == site) 
   
   # Format
   site_target_raw <- site_target_raw |>
     tidyr::pivot_wider(names_from = "variable", values_from = "observation")
   
-  if(!var %in% names(site_target_raw) || sum(!is.na(site_target_raw[var])) == 0){
-    message(paste0("No target observations at site ", site, 
+  if(!var %in% names(site_target_raw) || sum(!is.na(site_target_raw[var])) < 5){
+    message(paste0("Insufficient target observations at site ", site, 
                    ". Skipping forecasts at this site."))
     return()
   }
 
   site_target = site_target_raw |>
-    complete(datetime = full_seq(datetime, 1), site_id)
-
-  h = as.numeric(forecast_date - max(site_target$datetime)+horiz)
+    complete(datetime = seq.Date(from = min(datetime), 
+                                 to = max(datetime),
+                                 by = "month"), 
+             site_id)
   
-  days <- data.frame(doy = seq(1,366, 1), site_id = site)
+  dif_years = year(forecast_date) - year(max(site_target$datetime))
+  h = month(forecast_date) - month(max(site_target$datetime)) +
+    horiz +
+    12*dif_years
+  
+  months <- data.frame(month = 1:12, site_id = site)
 
   # calculate the mean and standard deviation for each doy
   target_clim <- site_target %>%
-    mutate(doy = yday(datetime)) %>%
-    group_by(doy, site_id) %>%
-    summarise(clim_mean = mean(get(!!var), na.rm = TRUE),
-              clim_sd = sd(get(!!var), na.rm = TRUE),
+    mutate(month = month(datetime)) %>%
+    group_by(month, site_id) %>%
+    summarize(clim_mean = mean(get(!!var), na.rm = T),
+              clim_sd = sd(get(!!var), na.rm = T),
               .groups = "drop") %>%
-    full_join(days, by = c("doy", "site_id")) %>%
-    arrange(doy)
+    #Calculate rolling mean
+    full_join(months, by = c("month", "site_id")) %>%
+    distinct()
   
-  # what dates do we want a forecast of?
-  forecast_dates <- (1:h)*step+max(site_target$datetime)
-  forecast_doy <- yday(forecast_dates)
+  # what months do we want a forecast of?
+  forecast_dates <- max(site_target$datetime) + months(1:h)
+  forecast_month <- month(forecast_dates)
   
   # put in a table
   forecast_dates_df <- tibble(datetime = forecast_dates,
-                              doy = forecast_doy)
+                              month = forecast_month)
   
   forecast <- target_clim %>%
-    mutate(doy = as.integer(doy)) %>%
-    filter(doy %in% forecast_doy) %>%
-    full_join(forecast_dates_df, by = 'doy') %>%
+    mutate(month = as.integer(month)) %>%
+    filter(month %in% forecast_month) %>%
+    full_join(forecast_dates_df, by = c('month')) %>%
     arrange(site_id, datetime)
   
   if(sum(!is.na(forecast$clim_mean)) == 0 | sum(!is.na(forecast$clim_sd)) == 0){
@@ -91,11 +97,11 @@ forecast_model <- function(site,
     mutate(mu = imputeTS::na_interpolation(x = mean),
            sigma = median(sd, na.rm = TRUE))
   
-  forecast = data.frame(project_id = "gcrew",
+  forecast = data.frame(project_id = "smartx",
                         model_id = model_id,
-                        datetime = (1:h)*step+max(site_target$datetime),
+                        datetime = max(site_target$datetime) + months(1:h),
                         reference_datetime = forecast_date,
-                        duration = "P1D",
+                        duration = "P1M",
                         site_id = site,
                         family = "normal",
                         variable = var,

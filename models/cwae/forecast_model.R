@@ -15,13 +15,12 @@ model_variables <- all_forecast_vars$`"official" targets name`
 all_sites = F #Whether the model is /trained/ across all sites
 sites = "all" #Sites to forecast
 noaa = F #Whether the model requires NOAA data
-window = 10 #Number of days to use in the climate window
 
 #### Step 2: Define the forecast model
 forecast_model <- function(site,
                            var,
                            noaa_past_mean = NULL,
-                           noaa_future_daily = NULL,
+                           noaa_future_monthly = NULL,
                            target,
                            horiz,
                            step,
@@ -48,52 +47,40 @@ forecast_model <- function(site,
   }
 
   site_target = site_target_raw |>
-    complete(datetime = full_seq(datetime, 1), site_id)
-
-  h = as.numeric(forecast_date - max(site_target$datetime)+horiz)
+    complete(datetime = seq.Date(from = min(datetime), 
+                                 to = max(datetime),
+                                 by = "month"), 
+             site_id)
   
-  days <- data.frame(doy = seq(1,366, 1), site_id = site)
+  dif_years = year(forecast_date) - year(max(site_target$datetime))
+  h = month(forecast_date) - month(max(site_target$datetime)) +
+    horiz +
+    12*dif_years
+  
+  months <- data.frame(month = 1:12, site_id = site)
   
   # calculate the mean and standard deviation for each doy
   target_clim <- site_target %>%
-    mutate(doy = yday(datetime)) %>%
-    #Wrap around doys for rolling mean
-    mutate(dup = ifelse(doy <= window/2, 2, 1)) %>%
-    uncount(dup, .id = "dup") %>%
-    mutate(doy = ifelse(dup>1, doy + 365, doy)) %>%
-    mutate(dup = ifelse(doy >= 365- window/2, 2, 1)) %>%
-    uncount(dup, .id = "dup") %>%
-    mutate(doy = ifelse(dup>1, doy - 365, doy)) %>%
-    arrange(doy) %>%
+    mutate(month = month(datetime)) %>%
+    group_by(month, site_id) %>%
+    summarize(clim_mean = mean(get(!!var), na.rm = T),
+              clim_sd = sd(get(!!var), na.rm = T),
+              .groups = "drop") %>%
     #Calculate rolling mean
-    mutate(clim_mean = slider::slide_index_dbl(.x = get(!!var), 
-                                               .i = doy, 
-                                               .f = mean, 
-                                               na.rm = T,
-                                               .before = window/2,
-                                               .after = window/2),
-           clim_sd = slider::slide_index_dbl(.x = get(!!var), 
-                                             .i = doy, 
-                                             .f = sd, 
-                                             na.rm = T,
-                                             .before = window/2,
-                                             .after = window/2)) %>%
-    filter(doy >= 1 & doy <= 366) %>%
-    select(-any_of(c("dup", var))) %>%
-    full_join(days, by = c("doy", "site_id")) %>%
-    select(-datetime) %>%
+    full_join(months, by = c("month", "site_id")) %>%
     distinct()
   
   # what dates do we want a forecast of?
-  forecast_dates <- c(site_target$datetime, (1:h)*step+max(site_target$datetime))
-  forecast_doy <- yday(forecast_dates)
+  forecast_dates <- max(site_target$datetime) + months(1:h)
+  forecast_month <- month(forecast_dates)
   forecast_dates_df <- tibble(datetime = forecast_dates,
-                              doy = forecast_doy)
+                              month = forecast_month)
+  
   # Create forecast
   forecast <- target_clim %>%
-    mutate(doy = as.integer(doy)) %>%
-    filter(doy %in% forecast_doy) %>%
-    full_join(forecast_dates_df, by = c('doy')) %>%
+    mutate(month = as.integer(month)) %>%
+    filter(month %in% forecast_month) %>%
+    full_join(forecast_dates_df, by = c('month')) %>%
     arrange(site_id, datetime)
   
   #Check for sufficient data
@@ -103,18 +90,22 @@ forecast_model <- function(site,
     return()
   }
   
-  # Interpolate
-  combined <- forecast %>%
-    select(datetime, site_id, clim_mean, clim_sd) %>%
-    rename(mean = clim_mean,
-           sd = clim_sd) %>%
-    mutate(mu = imputeTS::na_interpolation(x = mean),
-           sigma = median(sd, na.rm = TRUE))
+  # Interpolate if a month is missing
+  combined <- target_clim %>%
+    select(month, site_id, clim_mean, clim_sd) %>%
+    group_by(month, site_id) %>%
+    summarize(mu = imputeTS::na_interpolation(x = clim_mean),
+              sigma = median(clim_sd, na.rm = TRUE),
+              .groups = "drop")
   
   #Now, use arima model on the residuals
   resids <- combined %>%
-    left_join(site_target, by = c("datetime", "site_id")) %>%
-    mutate(resid = CH4_slope_umol_m2_day - mu)
+    right_join(site_target %>%
+                 mutate(month = month(datetime)), 
+               by = c("month", "site_id")) %>%
+    mutate(resid = CH4_slope_umol_m2_d - mu) %>%
+    arrange(datetime)
+  
   fit = auto.arima(resids$resid)
   forecast_raw <- as.data.frame(forecast(fit, h = h, level=0.68)) %>% #One SD
     mutate(sigma = `Hi 68`-`Point Forecast`)  
@@ -122,27 +113,27 @@ forecast_model <- function(site,
   #Compile into df
   arima_errors <- data.frame(mu_arima = as.numeric(forecast_raw$`Point Forecast`),
                              sigma_arima = as.numeric(forecast_raw$sigma),
-                             datetime = (1:h)*step+max(site_target$datetime))
+                             datetime = forecast_dates)
   
   #Combine
-  final <- combined %>%
+  final <- forecast %>%
     left_join(arima_errors, by = c("datetime")) %>%
     filter(datetime >= forecast_date) %>%
-    mutate(mu_final = mu_arima + mu,
-           sigma_final = sqrt(sigma_arima^2 + sigma^2))
+    mutate(mu_final = mu_arima + clim_mean,
+           sigma_final = sqrt(sigma_arima^2 + clim_sd^2))
   
-  forecast = data.frame(project_id = "gcrew",
+  forecast = data.frame(project_id = "smartx",
                         model_id = model_id,
                         datetime = final$datetime,
                         reference_datetime = forecast_date,
-                        duration = "P1D",
+                        duration = "P1M",
                         site_id = site,
                         family = "normal",
                         variable = var,
                         mu = as.numeric(final$mu_final),
                         sigma = as.numeric(final$sigma_final)
                         )%>%
-    pivot_longer(cols = c(mu,sigma), names_to = "parameter",values_to = "prediction")%>%
+    pivot_longer(cols = c(mu,sigma), names_to = "parameter", values_to = "prediction")%>%
     select(project_id, model_id, datetime, reference_datetime, duration,
            site_id, family, parameter, variable, prediction)
   
