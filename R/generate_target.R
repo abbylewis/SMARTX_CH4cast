@@ -39,7 +39,7 @@ generate_target <- function(){
               n = n(),
               .groups = "drop")
   
-  write.csv(target, here::here("L1_target.csv"), row.names = FALSE)
+  write.csv(target, here::here("L1_target_not_sdrive.csv"), row.names = FALSE)
   return(target)
 }
 
