@@ -19,7 +19,7 @@ noaa = T #Whether the model requires NOAA data
 forecast_model <- function(site,
                            var,
                            noaa_past_mean,
-                           noaa_future_daily,
+                           noaa_future_monthly,
                            target,
                            horiz,
                            step,
@@ -47,11 +47,11 @@ forecast_model <- function(site,
                    ". Skipping forecasts at this site."))
     return()
     
-  } else if(sum(!is.na(site_target$AirTemp_C_mean) & 
-                !is.na(site_target$RH_percent_mean) &
-                !is.na(site_target$WindSpeed_ms_mean) &
-                !is.na(site_target$Rain_mm_sum) &
+  } else if(sum(!is.na(site_target$Temp_K) & 
+                !is.na(site_target$WindSpeed_ms) &
+                !is.na(site_target$PrecipRate_ms) &
                 !is.na(site_target$Pressure_Pa) &
+                !is.na(site_target$SolarRad_Wm2) &
                 !is.na(site_target[var]))<10){
     message(paste0("Insufficient met data that corresponds with target observations at site ",site,". Skipping forecasts at this site."))
     return()
@@ -59,22 +59,22 @@ forecast_model <- function(site,
   } else {
     # Fit linear model based on past data: target = m * air temp + b
     fit <- randomForest::randomForest(get(var) ~ 
-                                        AirTemp_C_mean * 
-                                        RH_percent_mean * 
-                                        Rain_mm_sum *
-                                        WindSpeed_ms_mean *
+                                        Temp_K * 
+                                        SolarRad_Wm2 * 
+                                        PrecipRate_ms *
+                                        WindSpeed_ms *
                                         Pressure_Pa, 
                                       data = site_target,
                                       importance=TRUE)
     
     #  Get 30-day predicted temp ensemble at the site
-    new_data <- noaa_future_daily |>
-      select(AirTemp_C_mean, RH_percent_mean, Rain_mm_sum, WindSpeed_ms_mean, Pressure_Pa)
+    new_data <- noaa_future_monthly |>
+      select(Temp_K, SolarRad_Wm2, PrecipRate_ms, WindSpeed_ms, Pressure_Pa)
     
     preds <- predict(fit, new_data) #THIS IS THE FORECAST STEP
     
     # use the linear model to forecast target variable for each ensemble member
-    forecast <- noaa_future_daily |> 
+    forecast <- noaa_future_monthly |> 
       mutate(site_id = site,
              prediction = preds,
              variable = var) %>%

@@ -8,7 +8,6 @@ library(glmnet)
 
 #### Step 1: Set model specifications
 model_id <- "lasso"
-model_timestamp <- "P1D"
 all_forecast_vars <- read_csv(here::here("forecast_variables.csv"), show_col_types = FALSE)
 model_variables <- all_forecast_vars$`"official" targets name`
 # Global parameters used in generate_tg_forecast()
@@ -20,7 +19,7 @@ noaa = T #Whether the model requires NOAA data
 forecast_model <- function(site,
                            var,
                            noaa_past_mean,
-                           noaa_future_daily,
+                           noaa_future_monthly,
                            target,
                            horiz,
                            step,
@@ -39,9 +38,7 @@ forecast_model <- function(site,
   # Merge in past NOAA data into the targets file, matching by date.
   site_target <- site_target_raw |>
     tidyr::pivot_wider(names_from = "variable", values_from = "observation") |>
-    dplyr::left_join(noaa_past_mean %>%
-                       filter(site_id == "gcrew") %>%
-                       select(-site_id), 
+    dplyr::left_join(noaa_past_mean, 
                      by = c("datetime")) %>%
     na.omit()
   
@@ -50,18 +47,18 @@ forecast_model <- function(site,
                    ". Skipping forecasts at this site."))
     return()
     
-  } else if(sum(!is.na(site_target$AirTemp_C_mean) & 
-                !is.na(site_target$RH_percent_mean) &
-                !is.na(site_target$WindSpeed_ms_mean) &
-                !is.na(site_target$Rain_mm_sum) &
+  } else if(sum(!is.na(site_target$Temp_K) & 
+                !is.na(site_target$WindSpeed_ms) &
+                !is.na(site_target$PrecipRate_ms) &
                 !is.na(site_target$Pressure_Pa) &
+                !is.na(site_target$SolarRad_Wm2) &
                 !is.na(site_target[var]))<10){
     message(paste0("Insufficient met data that corresponds with target observations at site ",site,". Skipping forecasts at this site."))
     return()
     
   } else {
     data_matrix <- site_target |>
-      dplyr::select(AirTemp_C_mean, RH_percent_mean, Rain_mm_sum, WindSpeed_ms_mean, Pressure_Pa) %>%
+      dplyr::select(Temp_K, SolarRad_Wm2, PrecipRate_ms, WindSpeed_ms, Pressure_Pa) %>%
       as.matrix()
     y_var <- site_target[[var]]
     #perform k-fold cross-validation to find optimal lambda value
@@ -76,14 +73,14 @@ forecast_model <- function(site,
     fit$predicted <- predict(fit, s = best_lambda, newx = data_matrix)
     
     #  Get 30-day predicted temp ensemble at the site
-    new_data <- noaa_future_daily |>
-      select(AirTemp_C_mean, RH_percent_mean, Rain_mm_sum, WindSpeed_ms_mean, Pressure_Pa) %>%
+    new_data <- noaa_future_monthly |>
+      select(Temp_K, SolarRad_Wm2, PrecipRate_ms, WindSpeed_ms, Pressure_Pa) %>%
       as.matrix()
     
     preds <- predict(fit, new_data, s = best_lambda) #THIS IS THE FORECAST STEP
     
     # use model to forecast target variable for each ensemble member
-    forecast <- noaa_future_daily |> 
+    forecast <- noaa_future_monthly |> 
       mutate(site_id = site,
              prediction = preds, 
              variable = var) %>%

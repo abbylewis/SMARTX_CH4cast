@@ -1,6 +1,6 @@
 source(here::here("R","run_all_sites.R"))
-source(here::here("R","load_hist_weather.R"))
-source(here::here("R","load_and_save_gefs.R"))
+#source(here::here("R","load_hist_weather.R"))
+#source(here::here("R","load_and_save_gefs.R"))
 library(tidyverse)
 
 generate_tg_forecast <- function(forecast_date,
@@ -16,49 +16,39 @@ generate_tg_forecast <- function(forecast_date,
                                  use_ref_year = T) {
   
   ### Step 1: Download latest target data
-  target <- read_csv(here::here("L1_target.csv"))
-  if(!use_ref_year){
-    target <- target %>%
-      filter(year(datetime) != 2021)
-  }
+  target <- read_csv(here::here("L1_target.csv"), show_col_types = F) %>%
+    dplyr::mutate(datetime = as.Date(datetime),
+                  datetime = as.Date(paste(year(datetime), month(datetime), "01", sep = "-"))) %>%
+    group_by(site_id, datetime, project_id, duration, variable) %>%
+    summarize(observation = mean(observation, na.rm = T), .groups = "drop")
   
   ### Step 2: Set forecast specifications
   if(sites == "all"){
     sites <- unique(target$site_id)
   }
-  horiz = 35
+  horiz = 6
   step = 1
   
-  ### Step 3: Get NOAA driver data (if needed)
-  if(noaa){ #Some forecasts do not use any noaa driver data --> in that case skip download
-    forecast_date <- as.Date(forecast_date)
-    
-    #Identify available files
-    saved_met <- list.files(here::here("met_downloads"))
-    if(sum(grepl(forecast_date, saved_met)) == 0){
-      #This function loads meteorology and harmonizes past/future predictions
-      met <- load_and_save_gefs(date = forecast_date) 
-      past <- load_hist_weather() #refresh historical data
-    }
-
-    #Load forecasts
-    noaa_future_daily <- read_csv(here::here("met_downloads",
-                                             paste0("future_daily_",forecast_date,".csv")),
+  ### Step 3: Get NOAA driver data
+  forecast_date <- as.Date(forecast_date)
+  
+  #Load forecasts
+  noaa_future_monthly <- read_csv(here::here("met_downloads",
+                                             "monthly_forecasts.csv"),
                                   show_col_types = F) %>%
-      pivot_wider(names_from = "variable", values_from = "prediction")
-    
-    # Load historical data
-    noaa_past_mean <- read_csv(here::here("met_downloads",
-                                         "past_daily_current.csv"),
-                               show_col_types = F) %>%
-      filter(datetime <= forecast_date) %>%
-      pivot_wider(names_from = "variable", values_from = "prediction")
-    
-  } else {
-    forecast_date <- as.Date(forecast_date)
-    noaa_future_daily <- NULL
-    noaa_past_mean <- NULL
-  }
+    pivot_wider(names_from = "variable", values_from = "prediction") %>%
+    filter(reference_datetime <= forecast_date) %>%
+    filter(reference_datetime == max(reference_datetime))
+  
+  
+  # Load historical data
+  noaa_past_mean <- read_csv(here::here("met_downloads",
+                                        "monthly_forecasts.csv"),
+                             show_col_types = F) %>%
+    filter(horizon == 1) %>%
+    group_by(datetime, variable) %>%
+    summarize(prediction = mean(prediction, na.rm = T), .groups = "drop") %>%
+    pivot_wider(names_from = "variable", values_from = "prediction")
   
   ### Step 4: forecast!
   # Run all variables
@@ -69,7 +59,7 @@ generate_tg_forecast <- function(forecast_date,
                             sites = sites,
                             forecast_model = forecast_model,
                             noaa_past_mean = noaa_past_mean,
-                            noaa_future_daily = noaa_future_daily,
+                            noaa_future_monthly = noaa_future_monthly,
                             target = target,
                             horiz = horiz,
                             step = step,
@@ -81,7 +71,7 @@ generate_tg_forecast <- function(forecast_date,
                             .f = forecast_model,
                             sites = sites,
                             noaa_past_mean = noaa_past_mean,
-                            noaa_future_daily = noaa_future_daily,
+                            noaa_future_monthly = noaa_future_monthly,
                             target = target,
                             horiz = horiz,
                             step = step,
@@ -138,8 +128,8 @@ generate_tg_forecast <- function(forecast_date,
         geom_ribbon(aes(ymin = mu - sigma, ymax = mu + sigma), alpha = 0.3) +
         geom_point(data = target %>%
                      #mutate(site_id = factor(site_id, levels = chamber_levels)) %>%
-                     filter(datetime >= forecast_date - 35 * step,
-                            datetime <= forecast_date + horiz * step), 
+                     filter(datetime >= forecast_date - horiz * 30 * step,
+                            datetime <= forecast_date + horiz * 30 * step), 
                    aes(x = datetime, y = observation, alpha = datetime >= forecast_date)) +
         scale_alpha_manual(values = c(1, .5)) +
         theme(legend.position = "none") +

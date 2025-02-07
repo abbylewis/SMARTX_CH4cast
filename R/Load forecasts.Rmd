@@ -34,12 +34,13 @@ Lon <- ncvar_get(ncFile_t,"longitude")
 Lon <- ifelse(Lon > 180, -(360 - Lon), Lon)
 Lat <- ncvar_get(ncFile_t,"latitude")
 reference_datetime <- as.Date("1970-01-01")+seconds(ncvar_get(ncFile_t,"forecast_reference_time"))
-ensemble <- ncvar_get(ncFile_t,"number")
+parameter <- ncvar_get(ncFile_t,"number")
 horizon <- ncvar_get(ncFile_t,"forecastMonth")
 fillvalue <- ncatt_get(ncFile_t, "t2m","missval") 
 
-ids <- expand.grid(Lon, Lat, reference_datetime, horizon, ensemble)
-colnames(ids) <- c("Lon", "Lat", "reference_datetime", "horizon", "ensemble")
+ids <- data.frame(expand.grid(Lat, Lon, horizon, reference_datetime, parameter))
+colnames(ids) <- c("Lat", "Lon", "horizon", "reference_datetime", "parameter")
+wind_ms <- ncvar_get(ncFile_t,"si10")
 temp_k <- ncvar_get(ncFile_t,"t2m")
 pressure_pa <- ncvar_get(ncFile_t,"msl")
 soil_temp_k <- ncvar_get(ncFile_t,"stl1")
@@ -48,18 +49,25 @@ precip_rate_ms <- ncvar_get(ncFile_t,"tprate")
 
 df <- data.frame(ids, 
                  Temp_K = as.numeric(temp_k), 
+                 WindSpeed_ms = as.numeric(wind_ms),
                  Pressure_Pa = as.numeric(pressure_pa), 
-                 Soil_Temp_K = as.numeric(soil_temp_k), 
-                 Solar_Rad_Wm2 = as.numeric(solar_rad_wm2), 
-                 Precip_Rate_Ms = as.numeric(precip_rate_ms)) %>%
+                 SoilTemp_K = as.numeric(soil_temp_k), 
+                 SolarRad_Wm2 = as.numeric(solar_rad_wm2), 
+                 PrecipRate_ms = as.numeric(precip_rate_ms)) %>%
   mutate(datetime = reference_datetime + months(horizon),
          model_id = "ECMWF-seasonal") %>%
   filter(Lon == -76, Lat == 39) %>% #-76 is slightly further than -77 but climate is more similar
 #https://weatherspark.com/compare/y/21929~21008~21691/Comparison-of-the-Average-Weather-in-Centreville-Silver-Spring-and-Edgewater
-  pivot_longer(cols = c(Temp_K, Pressure_Pa, Soil_Temp_K, Solar_Rad_Wm2, Precip_Rate_Ms),
+  pivot_longer(cols = c(Temp_K, Pressure_Pa, SoilTemp_K, SolarRad_Wm2, PrecipRate_ms, WindSpeed_ms),
                names_to = "variable",
                values_to = "prediction") %>%
   select(-Lat, -Lon)
 
 write.csv(df,"../met_downloads/monthly_forecasts.csv", row.names = F)
+
+df %>%
+  filter(variable == "Temp_K") %>%
+  ggplot(aes(x = datetime, y = prediction, group = parameter)) +
+  geom_line() +
+  facet_wrap(~variable, scales = "free_y")
 ```
