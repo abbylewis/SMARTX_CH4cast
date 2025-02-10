@@ -18,6 +18,9 @@ generate_target_sdrive <- function(path){
   data <- files %>%
     map(read_csv, col_types = cols(.default = col_character())) %>%
     bind_rows() %>%
+    mutate(flux.CH4 = ifelse(Date == "2024-08-06" & Plot %in% c(333, 313),
+                             NA, #Severely non-linear
+                             flux.CH4)) %>%
     filter(is.na(Light) | Light %in% c("Dark")) %>%
     select(Date, Plot, flux.CH4) # These are the only columns that are in all files rn
   
@@ -46,3 +49,6 @@ generate_target_sdrive <- function(path){
 }
 
 target <- generate_target_sdrive(path = "C:/Users/lewisa4/OneDrive - Smithsonian Institution/Desktop/SMARTX_CH4cast")
+target %>%
+  ggplot(aes(x= datetime, y = CH4_slope_umol_m2_d)) +
+  geom_point()
