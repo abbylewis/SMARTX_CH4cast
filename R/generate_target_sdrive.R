@@ -18,8 +18,19 @@ generate_target_sdrive <- function(path){
   data <- files %>%
     map(read_csv, col_types = cols(.default = col_character())) %>%
     bind_rows() %>%
-    mutate(flux.CH4 = ifelse(Date == "2024-08-06" & Plot %in% c(333, 313),
+    mutate(Date = parse_date_time(Date, 
+                                  orders = c("m d Y", "Y m d")),
+           flux.CH4 = ifelse(Date == as.Date("2024-08-06") & Plot %in% c(333, 313),
                              NA, #Severely non-linear
+                             flux.CH4),
+           flux.CH4 = ifelse(Date == as.Date("2018-12-19") & Plot %in% c(321),
+                             NA, #Severely non-linear
+                             flux.CH4),
+           flux.CH4 = ifelse(Date == as.Date("2019-06-12"),
+                             NA, #Something weird happened where concentrations generally got quite high. Removing to be safe
+                             flux.CH4),
+           flux.CH4 = ifelse(Date == as.Date("2018-09-19") & Plot == 313,
+                             NA, #Readme.txt says to remove
                              flux.CH4)) %>%
     filter(is.na(Light) | Light %in% c("Dark")) %>%
     select(Date, Plot, flux.CH4) # These are the only columns that are in all files rn
@@ -28,8 +39,6 @@ generate_target_sdrive <- function(path){
   target <- data %>%
     mutate(project_id = "smartx",
            duration = "P1M",
-           Date = parse_date_time(Date, 
-                                  orders = c("m d Y", "Y m d")),
            CH4_slope_umol_m2_d = as.numeric(flux.CH4)) %>% #Need to figure out units
     rename(site_id = Plot,
            datetime = Date) %>%
@@ -49,6 +58,7 @@ generate_target_sdrive <- function(path){
 }
 
 target <- generate_target_sdrive(path = "C:/Users/lewisa4/OneDrive - Smithsonian Institution/Desktop/SMARTX_CH4cast")
+
 target %>%
-  ggplot(aes(x= datetime, y = CH4_slope_umol_m2_d)) +
+  ggplot(aes(x = datetime, y = observation, color = site_id)) +
   geom_point()
