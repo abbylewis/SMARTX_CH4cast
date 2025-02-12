@@ -69,8 +69,8 @@ forecast_model <- function(site,
   }
   
   # Fit ets with interpolated data
-  fit = ets(ts_data_interp)
-  
+  fit = ets(ts(ts_data_interp, frequency = 12))
+
   # use the model to forecast target variable
   forecast_raw <- as.data.frame(forecast(fit,h=h,level=0.68))%>% #One SD
     mutate(sigma = `Hi 68`-`Point Forecast`)

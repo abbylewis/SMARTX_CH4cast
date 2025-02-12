@@ -19,7 +19,7 @@ generate_target <- function(){
     map(read_csv, show_col_types = F) %>%
     bind_rows() %>%
     #filter(is.na(Light) | Light %in% c("Light", "Full")) %>%
-    select(Date, Plot, flux.CH4) # These are the only columns that are in all files rn
+    select(Date, Plot, flux.CH4, R2.CH4)
   
   #Format as target data
   target <- data %>%

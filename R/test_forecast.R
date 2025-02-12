@@ -3,11 +3,11 @@
 source(here::here("R","generate_target.R"))
 
 #Change file path here to try a different model
-source(here::here("models","cwae","forecast_model.R"))
+source(here::here("models","ets","forecast_model.R"))
 
 #Run remaining code and visualize forecasts
 source(here::here("R","generate_tg_forecast.R"))
-generate_tg_forecast(forecast_date = "2023-05-12",
+generate_tg_forecast(forecast_date = "2024-06-01",
                      forecast_model = forecast_model,
                      model_variables = model_variables,
                      model_id = model_id,
