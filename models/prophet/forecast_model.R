@@ -65,7 +65,7 @@ forecast_model <- function(site,
     ggplot(aes(x = ds, y = y)) +
     geom_point()+
     geom_line()
-  fit <- prophet(df, interval.width = 0.68, weekly.seasonality = F)
+  fit <- prophet(df, interval.width = 0.68, weekly.seasonality = F, daily.seasonality = F)
   future <- make_future_dataframe(fit, periods = h, include_history = F)
   
   # use the model to forecast target variable

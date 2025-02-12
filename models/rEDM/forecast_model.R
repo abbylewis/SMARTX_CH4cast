@@ -52,7 +52,13 @@ forecast_model <- function(site,
                                  to = max(datetime),
                                  by = "month"), 
              site_id) |>
-    #filter(!(datetime > "2022-10-13" & datetime <= "2023-06-27")) %>%
+    mutate(month = month(datetime)) %>%
+    group_by(site_id, month) |>
+    mutate(CH4_slope_umol_m2_d = ifelse(is.na(CH4_slope_umol_m2_d),
+                                        mean(CH4_slope_umol_m2_d, na.rm = T),
+                                        CH4_slope_umol_m2_d)) %>%
+    ungroup() %>%
+    mutate(CH4_slope_umol_m2_d = na.interp(CH4_slope_umol_m2_d)) %>%
     arrange(datetime)
   
   dif_years = year(forecast_date) - year(max(site_target$datetime))
@@ -60,17 +66,18 @@ forecast_model <- function(site,
     horiz +
     12*dif_years
   n <- nrow(site_target)
-  lib <- c(1, n) # use all data for training (why not)
+  lib <- c(1, round(n*.8)) # use 80% of data for training
+  pred <- c(round(n*.8) + 1, n)
   
-  dims <- EmbedDimension(dataFrame = data.frame(site_target %>% select(-site_id)),
-                         columns = "CH4_slope_umol_m2_d", target = "CH4_slope_umol_m2_d", 
-                         lib = lib, pred = lib,  # which portions of the data to train and predict
-                         maxE = 5)
+  dims <- rEDM::EmbedDimension(dataFrame = data.frame(site_target %>% select(-site_id)),
+                         columns = "CH4_slope_umol_m2_d", target = "CH4_slope_umol_m2_d",
+                         lib = lib, pred = pred,  # which portions of the data to train and predict
+                         maxE = 12, Tp = 6)
   opt_dim <- which.max(dims$rho)
   
   fits <- rEDM::SMap(dataFrame = data.frame(site_target %>% select(-site_id)),
                        columns = "CH4_slope_umol_m2_d", target = "CH4_slope_umol_m2_d", 
-                       lib = lib, pred = lib, # which portions of the data to train and predict
+                       lib = c(1,n), pred = c(1,n), # which portions of the data to train and predict
                        E = opt_dim)$predictions
   
   fits %>%
@@ -78,9 +85,10 @@ forecast_model <- function(site,
     geom_point(aes(y = Observations), color = "blue") +
     geom_line(aes(y = Predictions), color = "red")
   
+  #Use all data for final forecasts
   output <- rEDM::SMap(dataFrame = data.frame(site_target %>% select(-site_id)),
                           columns = "CH4_slope_umol_m2_d", target = "CH4_slope_umol_m2_d", 
-                          lib = lib, pred = lib, # which portions of the data to train and predict
+                          lib = c(1,n), pred = c(1,n), # which portions of the data to train and predict
                           E = opt_dim, generateSteps = h)$predictions
   
   #generateSteps will override prediction interval

@@ -49,7 +49,16 @@ forecast_model <- function(site,
     complete(datetime = seq.Date(from = min(datetime), 
                                  to = max(datetime),
                                  by = "month"), 
-             site_id)
+             site_id) |>
+    mutate(month = month(datetime)) %>%
+    group_by(site_id, month) |>
+    mutate(CH4_slope_umol_m2_d = ifelse(is.na(CH4_slope_umol_m2_d),
+                                        mean(CH4_slope_umol_m2_d, na.rm = T),
+                                        CH4_slope_umol_m2_d)) %>%
+    ungroup() %>%
+    mutate(CH4_slope_umol_m2_d = na.interp(CH4_slope_umol_m2_d)) %>%
+    #filter(!(datetime > "2022-10-13" & datetime <= "2023-06-27")) %>%
+    arrange(datetime)
   
   dif_years = year(forecast_date) - year(max(site_target$datetime))
   h = month(forecast_date) - month(max(site_target$datetime)) +
@@ -58,18 +67,8 @@ forecast_model <- function(site,
     
   ts_data = as.ts(site_target[var])
   
-  #If all data are positive, apply the correct transformation
-  if(sum(ts_data < 0, na.rm=T) == 0){ #if there are no negative values, consider transformation
-    #Deal with 0s before transformation
-    ts_data[ts_data == 0] <- 
-      min(ts_data[!is.na(ts_data) & ts_data > 0], na.rm = T)/2 
-    ts_data_interp = na.interp(ts_data, lambda = "auto")
-  } else {
-    ts_data_interp = na.interp(ts_data)
-  }
-  
   # Fit ets with interpolated data
-  fit = ets(ts(ts_data_interp, frequency = 12))
+  fit = ets(ts(ts_data, frequency = 12))
 
   # use the model to forecast target variable
   forecast_raw <- as.data.frame(forecast(fit,h=h,level=0.68))%>% #One SD
