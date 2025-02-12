@@ -98,12 +98,11 @@ forecast_model <- function(site,
            variable = var,
            project_id = "smartx",
            duration = "P1M") |>
-    select(any_of(c("project_id", "model_id", "datetime", "reference_datetime",
+    data.frame() %>%
+    dplyr::select(all_of(c("project_id", "model_id", "datetime", "reference_datetime",
                     "duration", "site_id", "family", "parameter", 
                     "variable", "prediction"))) |>
-    select(-any_of('.model')) |>
     filter(datetime > reference_datetime) |>
-    ungroup() |>
     as_tibble()
   
   return(forecast)

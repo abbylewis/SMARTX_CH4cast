@@ -6,6 +6,6 @@ score_all_forecasts <- function(forecasts, observations) {
     select(-observation)
   
   scores <- score4cast::score(comb, observations)
-  write.csv(scores, "scores.csv")
+  write_csv(scores, "scores.csv")
   return(scores)
 }

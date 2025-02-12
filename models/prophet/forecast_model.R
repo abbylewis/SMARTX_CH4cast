@@ -55,13 +55,16 @@ forecast_model <- function(site,
              site_id)
   
   dif_years = year(forecast_date) - year(max(site_target$datetime))
-  h = month(forecast_date) - month(max(site_target$datetime)) +
-    horiz +
-    12*dif_years
+  h = as.numeric(forecast_date + months(horiz) - max(site_target$datetime)) #DAYS for prophet model
 
   # Fit prophet model
   df <- site_target %>%
     select(ds = datetime, y = !!sym(var))
+  
+  df %>%
+    ggplot(aes(x = ds, y = y)) +
+    geom_point()+
+    geom_line()
   fit <- prophet(df, interval.width = 0.68, weekly.seasonality = F)
   future <- make_future_dataframe(fit, periods = h, include_history = F)
   
@@ -69,11 +72,12 @@ forecast_model <- function(site,
   forecast_raw <- predict(fit, future) %>%
     mutate(sd_upper = yhat_upper - yhat,
            sd_lower = yhat - yhat_lower,
-           sigma = (sd_upper + sd_lower)/2)
+           sigma = (sd_upper + sd_lower)/2) %>%
+    filter(day(ds) == 1)
   
   forecast = data.frame(project_id = "smartx",
                         model_id = model_id,
-                        datetime = max(site_target$datetime) + months(1:h),
+                        datetime = as.Date(forecast_raw$ds),
                         reference_datetime = forecast_date,
                         duration = "P1M",
                         site_id = site,

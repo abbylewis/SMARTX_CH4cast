@@ -11,5 +11,5 @@ rerun_forecasts(forecast_model = forecast_model,
                 sites = sites,
                 noaa = noaa,
                 END = END,
-                start_date = '2016-05-01',
-                end_date = "2025-02-01")
+                start_date = '2023-01-01',
+                end_date = "2025-01-01")

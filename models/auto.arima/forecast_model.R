@@ -60,13 +60,13 @@ forecast_model <- function(site,
   # Fit arima model
   # If there are any non-positive values, don't consider transformation
   if(sum(site_target[var] < 0, na.rm=T) > 0){ 
-    fit = auto.arima(site_target[var])
+    fit = auto.arima(ts(site_target[var], frequency = 12), D = 1)
   } else {
     # Otherwise, use lambda = "auto"
     ts <- site_target[var]
     ts[ts == 0] <- min(ts[!is.na(ts) & ts > 0], na.rm = T)/2 #Deal with 0s before transformation
     message("Model run with transformation. Min value is ", min(ts, na.rm = T))
-    fit = auto.arima(site_target[var], lambda = "auto")
+    fit = auto.arima(ts(ts, frequency = 12), D = 1, lambda = "auto")
   }
   
   # use the model to forecast target variable
