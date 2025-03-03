@@ -10,6 +10,7 @@ editor: visual
 #devtools::install_github("eco4cast/score4cast")
 library(score4cast)
 library(tidyverse)
+library(lmerTest)
 source("../R/score_all_forecasts.R")
 #Metrics
 
@@ -19,7 +20,7 @@ outputs <- outputs[file.info(outputs)$size > 29] #Filter out empty files
 #forecasts <- read_csv(outputs, show_col_types = F)
 #oops-- model name in file does not include 2021 distinction
 load_forecast <- function(name){
-  model_id_new <- sub(".*-", "", sub(".csv.gz", "", name))
+  model_id_new <- sub(".*-", "", sub(".csv.gz", "", sub("-comb_reps", "", name)))
   forecast <- read_csv(name, 
                        col_types = "ccDDcncccn") %>%
     mutate(model_id = model_id_new)
@@ -34,34 +35,153 @@ observations <- read_csv("../L1_target.csv", show_col_types = F) %>%
   mutate(datetime_observed = datetime,
          datetime = as.Date(paste(year(datetime), month(datetime), "01", sep = "-"))) %>%
   group_by(project_id, site_id, datetime, duration, variable) %>%
-  summarize(observation = mean(observation),
+  summarize(observation = mean(observation, na.rm = T),
             dates_observed = list(unique(datetime_observed)),
+            .groups = "drop")
+observations2 <- observations %>%
+  mutate(site_id = paste0(substr(site_id, 1, 1), substr(site_id, 3, 3))) %>%
+  group_by(project_id, site_id, datetime, duration, variable) %>%
+  summarize(observation = mean(observation, na.rm = T),
             .groups = "drop")
 
 #Metadata
-metadata <- read_csv(here::here("Raw_data", "plot_treatments.csv"))
+metadata <- read_csv(here::here("Raw_data", "plot_treatments.csv")) %>%
+  mutate(Type = "Separate")
+metadata2 <- metadata %>%
+  mutate(Plot = as.numeric(paste0(substr(Plot, 1, 1), substr(Plot, 3, 3)))) %>%
+  select(-Transect) %>%
+  mutate(Type = "Rep_comb") %>%
+  distinct()
+metadata_all <- bind_rows(metadata, metadata2)
+observations %>%
+  left_join(metadata, by = c("site_id" = "Plot")) %>%
+  ggplot(aes(x = datetime, y = observation))+
+  geom_line()+
+  facet_wrap(~site_id)
+
+jpeg("../figures/Observations.jpg", width = 10, height = 5, units = "in", res = 300)
+observations %>%
+  left_join(metadata, by = c("site_id"="Plot")) %>%
+  group_by(Veg, CO2Treat) %>%
+  mutate(CO2Treat = case_match(CO2Treat,
+                               "Amb" ~ "Ambient~CO[2]",
+                               "Elev" ~ "Elevated~CO[2]"),
+         Temp = paste0(Temp, "~degree~C"),
+         Transect = ifelse(Transect > 3, Transect - 3, Transect),
+         year=year(datetime),
+         yday = as.Date("2024-01-01") + yday(datetime) - 1) %>%
+  ggplot(aes(x = yday, y = observation))+
+  geom_line(aes(group = paste0(year, site_id)), color = "grey")+
+  geom_line(aes(group = paste0(year, site_id)), data = . %>% filter(year == 2024), size = .8)+
+  ggh4x::facet_nested(Temp~Veg+CO2Treat, labeller = label_parsed, scale = "free_y", independent = "y")+
+  #facet_wrap(~site_id)+
+  theme_bw() +
+  scale_x_date(date_breaks = "4 month", date_labels = "%b")+
+  scale_y_continuous(n.breaks = 3)+
+  theme_bw(base_size = 10) +
+  ylab("Methane flux (µmol/m2/d)")+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"),
+        axis.title.x = element_blank(),
+        legend.position = "bottom",
+        strip.text = element_text(margin = ggplot2::margin(0.1,0.1,0.1,0.1, "lines")))
+dev.off()
+
+jpeg("../figures/Observations_amb.jpg", width = 5, height = 3, units = "in", res = 300)
+observations %>%
+  left_join(metadata, by = c("site_id"="Plot")) %>%
+  filter(CO2 == 0) %>%
+  group_by(Veg, CO2Treat) %>%
+  mutate(Veg = case_match(Veg,
+                          "C3" ~ "C[3]",
+                          "C4" ~ "C[4]"),
+         CO2Treat = case_match(CO2Treat,
+                               "Amb" ~ "Ambient~CO[2]",
+                               "Elev" ~ "Elevated~CO[2]"),
+         Temp = paste0(Temp, "~degree*C"),
+         Transect = ifelse(Transect > 3, Transect - 3, Transect),
+         year=year(datetime),
+         yday = as.Date("2024-01-01") + yday(datetime) - 1) %>%
+  ggplot(aes(x = yday, y = observation))+
+  geom_line(aes(group = paste0(year, site_id), color = year == 2024, alpha = year == 2024))+
+  scale_alpha_manual(values = c(0.3, 1), labels = c("Training years (2017 to 2023)", "Forecast year (2024)"), name = "Year")+
+  scale_color_manual(values = c("grey50", "black"), labels = c("Training years (2017 to 2023)", "Forecast year (2024)"), name = "Year")+
+  #geom_line(aes(group = paste0(year, site_id)), data = . %>% filter(year == 2024), size = .8)+
+  ggh4x::facet_nested(.~Temp, labeller = label_parsed)+
+  #facet_wrap(~site_id)+
+  theme_bw() +
+  scale_x_date(date_breaks = "4 month", date_labels = "%b")+
+  scale_y_continuous(n.breaks = 3)+
+  theme_bw(base_size = 10) +
+  ylab(expression(atop(Methane~flux,(µmol/m^{2}/d))))+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"),
+        axis.title.x = element_blank(),
+        legend.title = element_blank(),
+        legend.position = "bottom",
+        strip.text = element_text(margin = ggplot2::margin(0.1,0.1,0.1,0.1, "lines")))
+dev.off()
 
 observations %>%
-  ggplot(aes(x = datetime, y = observation))+
-  geom_point()+
-  facet_wrap(~site_id)
+  left_join(metadata, by = c("site_id"="Plot")) %>%
+  filter(month(datetime) == 8,
+         Veg == "C3",
+         CO2 == 0) %>%
+  group_by(Temp) %>%
+  summarize(min = min(observation),
+            max = max(observation),
+            sd = sd(observation))
+
+observations %>%
+  left_join(metadata, by = c("site_id"="Plot")) %>%
+  filter(CO2 == 0) %>%
+  group_by(Veg, CO2Treat) %>%
+  mutate(Veg = case_match(Veg,
+                          "C3" ~ "C[3]",
+                          "C4" ~ "C[4]"),
+         CO2Treat = case_match(CO2Treat,
+                               "Amb" ~ "Ambient~CO[2]",
+                               "Elev" ~ "Elevated~CO[2]"),
+         Temp = paste0(Temp, "~degree*C"),
+         Transect = ifelse(Transect > 3, Transect - 3, Transect),
+         year=year(datetime),
+         yday = as.Date("2024-01-01") + yday(datetime) - 1) %>%
+  ggplot(aes(x = yday, y = observation))+
+  geom_line(aes(group = paste0(year, site_id)))+
+  #geom_line(aes(group = paste0(year, site_id)), data = . %>% filter(year == 2024), size = .8)+
+  ggh4x::facet_nested(year~Veg+Temp, labeller = label_parsed)+
+  #facet_wrap(~site_id)+
+  theme_bw() +
+  scale_x_date(date_breaks = "4 month", date_labels = "%b")+
+  scale_y_continuous(n.breaks = 3)+
+  theme_bw(base_size = 10) +
+  ylab(expression(atop(Methane~flux,(µmol/m^{2}/d))))+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"),
+        axis.title.x = element_blank(),
+        legend.title = element_blank(),
+        legend.position = "bottom",
+        strip.text = element_text(margin = ggplot2::margin(0.1,0.1,0.1,0.1, "lines")))
 ```
 
 ## Score forecasts
 
 ```{r}
 #Re-score if needed, otherwise load saved scores
-#scores <- score_all_forecasts(forecasts, observations)
+observations_all = observations  %>%
+  bind_rows(observations2 %>%
+  mutate(site_id = as.numeric(site_id)))
+#scores <- score_all_forecasts(forecasts, observations_all)
 scores <- read_csv("scores.csv", show_col_types = F)
 
-scores_format <- scores %>%
-  filter(horizon > 0, !model_id == "persistence") %>%
+scores_format_all <- scores %>%
+  filter(horizon > 0, !model_id %in% c("persistence", "met_lm_step", "randomForestLog")) %>%
   mutate(horizon = round(as.numeric(difftime(datetime,reference_datetime, units = "days")/30.5))) %>%
-  left_join(metadata, by = c("site_id" = "Plot")) %>%
+  left_join(metadata_all, by = c("site_id" = "Plot")) %>%
   mutate(year = year(datetime),
          model_id = factor(model_id,
-                           levels = c("persistence", "auto.arima", "ets", "prophet", "rEDM", 
-                                      "climatology", "cwae", "lasso", "met_lm_step",
+                           levels = c("auto.arima", "ets", "prophet", "rEDM", 
+                                      "climatology", "cwae", "lasso", "svm",
                                       "randomForest", "ridge")),
          model_type = ifelse(model_id %in% c("auto.arima", "ets", "prophet", "rEDM"),
                              "time series",
@@ -72,10 +192,13 @@ scores_format <- scores %>%
          #model_type = ifelse(model_id %in% c("persistence"),
         #                     "persistence",
         #                     model_type),
-         model_type = ifelse(model_id %in% c("lasso", "met_lm_step", "randomForest", "ridge"),
+         model_type = ifelse(model_id %in% c("lasso", "randomForest", "ridge", "svm"),
                              "machine learning",
                              model_type)) %>%
   filter(year %in% c(2024))
+
+scores_format <- scores_format_all %>%
+  filter(Type == "Separate")
 ```
 
 ## Generate plots
@@ -97,8 +220,13 @@ grmse <- function(observation, forecast){
 jpeg("../figures/RMSE_all.jpg", width = 6, height = 3, units = "in", res = 300)
 scores_format %>%
   filter(horizon %in% c(6)) %>%
-  mutate(Treatment = paste(Temp, CO2Treat)) %>%
-  group_by(horizon, site_id, model_id, Temp, year, CO2Treat, Veg, Treatment) %>%
+  mutate(CO2Treat = case_match(CO2Treat,
+                               "Amb" ~ "Ambient~CO[2]",
+                               "Elev" ~ "Elevated~CO[2]"),
+         Veg = case_match(Veg,
+                          "C3" ~ "C[3]",
+                          "C4" ~ "C[4]")) %>%
+  group_by(horizon, site_id, model_id, Temp, year, CO2Treat, Veg) %>%
   summarize(rmse = Metrics::rmse(observation, mean),
             n = n(),
             .groups = "drop") %>%
@@ -109,18 +237,161 @@ scores_format %>%
               width = 0.3,
               size = 1) +
   geom_boxplot(outliers = F, alpha = 0, linewidth = 0.3) +
-  ggh4x::facet_nested(.~Veg+CO2Treat, space = "free_x", scales = "free_x")+
+  ggh4x::facet_nested(.~Veg+CO2Treat, 
+                      space = "free_x", scales = "free_x",
+                      labeller = label_parsed)+
   scale_linetype_manual(values = c("solid", "31"), 
                      labels = c("Ambient","Elevated"))+
-  scale_color_manual(values = colorspace::lighten(desat(viridis::viridis(10), 0.3), 0.6))+
-  xlab("Temperature treatment\n(ºC above ambient)")+
-  ylab("RMSE of 6-month forecast\n(µmol/m2/d)")+
+  scale_color_manual(values = colorspace::lighten(desat(viridis::viridis(11), 0.3), 0.6))+
+  xlab("Temperature treatment (ºC above ambient)")+
+  ylab(expression(atop("Error of 6-month forecast",(RMSE*";"~µmol/m^{2}/d))))+
   theme_bw(base_size = 10)+
   guides(color = guide_legend(byrow = TRUE, title = "Model"))+
   theme(strip.background = element_rect(fill = "white",
                                         color = "grey85"),
         legend.key.height = unit(0.7, 'lines'),
-        legend.text = element_text(margin = margin(t = 0, b = 0)),
+        legend.text = element_text(margin = ggplot2::margin(t = 0, b = 0)),
+        panel.grid.major.x = element_blank())
+dev.off()
+
+jpeg("../figures/RMSE_ambCO2.jpg", width = 5, height = 2.5, units = "in", res = 300)
+scores_format %>%
+  filter(horizon %in% c(6),
+         CO2Treat == "Amb") %>%
+  mutate(CO2Treat = case_match(CO2Treat,
+                               "Amb" ~ "Ambient~CO[2]",
+                               "Elev" ~ "Elevated~CO[2]"),
+         Veg = case_match(Veg,
+                          "C3" ~ "C[3]",
+                          "C4" ~ "C[4]"),) %>%
+  group_by(horizon, site_id, model_id, Temp, year, CO2Treat, Veg) %>%
+  summarize(rmse = Metrics::rmse(observation, mean),
+            n = n(),
+            .groups = "drop") %>%
+  mutate(Temp = as.factor(Temp)) %>%
+  ggplot(aes(x = Temp, 
+             y = rmse)) +
+  geom_jitter(aes(color = model_id, group = CO2Treat), 
+              width = 0.3,
+              size = 1) +
+  geom_boxplot(outliers = F, alpha = 0, linewidth = 0.3) +
+  ggh4x::facet_nested(.~Veg, 
+                      space = "free_x", scales = "free_x",
+                      labeller = label_parsed)+
+  scale_linetype_manual(values = c("solid", "31"), 
+                     labels = c("Ambient","Elevated"))+
+  scale_color_manual(values = colorspace::lighten(desat(viridis::viridis(11), 0.3), 0.6))+
+  xlab("Temperature treatment (ºC above ambient)")+
+  ylab(expression(atop("Error of 6-month forecast",(RMSE*";"~µmol/m^{2}/d))))+
+  theme_bw(base_size = 10)+
+  guides(color = guide_legend(byrow = TRUE, title = "Model"))+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"),
+        legend.key.height = unit(0.7, 'lines'),
+        legend.text = element_text(margin = ggplot2::margin(t = 0, b = 0)),
+        panel.grid.major.x = element_blank())
+dev.off()
+
+jpeg("../figures/RMSE_models.jpg", width = 5, height = 5, units = "in", res = 300)
+scores_format %>%
+  filter(horizon %in% c(6),
+         CO2Treat == "Amb") %>%
+  mutate(CO2Treat = case_match(CO2Treat,
+                               "Amb" ~ "Ambient~CO[2]",
+                               "Elev" ~ "Elevated~CO[2]"),
+         Veg = case_match(Veg,
+                          "C3" ~ "C[3]",
+                          "C4" ~ "C[4]"),) %>%
+  group_by(horizon, site_id, model_id, Temp, year, CO2Treat, Veg) %>%
+  summarize(rmse = Metrics::rmse(observation, mean),
+            n = n(),
+            .groups = "drop") %>%
+  mutate(Temp = as.factor(Temp)) %>%
+  ggplot(aes(y = model_id, 
+             x = rmse)) +
+  #geom_jitter(aes(color = model_id, group = CO2Treat), 
+  #            width = 0.3,
+  #            size = 1) +
+  #geom_boxplot(aes(color = model_id), outliers = F, alpha = 0, linewidth = 0.3) +
+  geom_point(aes(color = model_id)) +
+  ggh4x::facet_nested(Temp~Veg, 
+                      scales = "free",independent = "x",
+                      labeller = label_parsed)+
+  scale_linetype_manual(values = c("solid", "31"), 
+                     labels = c("Ambient","Elevated"))+
+  scale_color_manual(values = colorspace::lighten(desat(viridis::viridis(11), 0.3), 0.6))+
+  xlab("Temperature treatment (ºC above ambient)")+
+  ylab(expression(atop("Error of 6-month forecast",(RMSE*";"~µmol/m^{2}/d))))+
+  theme_bw(base_size = 10)+
+  guides(color = guide_legend(byrow = TRUE, title = "Model"))+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"),
+        legend.key.height = unit(0.7, 'lines'),
+        legend.text = element_text(margin = ggplot2::margin(t = 0, b = 0)),
+        panel.grid.major.x = element_blank())
+dev.off()
+
+jpeg("../figures/RMSE_eCO2.jpg", width = 5, height = 2.5, units = "in", res = 300)
+scores_format %>%
+  filter(horizon %in% c(6),
+         Veg == "C3",
+         Temp %in% c(0, 5.1)) %>%
+  group_by(horizon, site_id, model_id, Temp, year, CO2Treat, Veg) %>%
+  summarize(rmse = Metrics::rmse(observation, mean),
+            n = n(),
+            .groups = "drop") %>%
+  mutate(Temp = ifelse(Temp == 0,
+                       "Ambient~temperature",
+                       "+5.1~degree*C"),
+         Temp = factor(Temp, levels = c("Ambient~temperature", "+5.1~degree*C")),
+         Veg = case_match(Veg,
+                          "C3" ~ "C[3]",
+                          "C4" ~ "C[4]"),) %>%
+  ggplot(aes(x = CO2Treat, 
+             y = rmse)) +
+  geom_jitter(aes(color = model_id), 
+              width = 0.3,
+              size = 1) +
+  geom_boxplot(outliers = F, alpha = 0, linewidth = 0.3) +
+  ggh4x::facet_grid2(Veg~Temp, scales = "free_y", independent = "y", labeller = label_parsed)+
+  scale_color_manual(values = colorspace::lighten(desat(viridis::viridis(10), 0.3), 0.6))+
+  ylab(expression(atop("Error of 6-month forecast",(RMSE*";"~µmol/m^{2}/d))))+
+  xlab(expression(CO[2]~treatment))+
+  theme_bw(base_size = 10)+
+  scale_x_discrete(labels = c("Ambient", "Elevated"))+
+  guides(color = guide_legend(byrow = TRUE, title = "Model"))+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"),
+        legend.key.height = unit(0.7, 'lines'),
+        legend.text = element_text(margin = ggplot2::margin(t = 0, b = 0)),
+        panel.grid.major.x = element_blank())
+dev.off()
+
+jpeg("../figures/climate_only.jpg", width = 6, height = 3, units = "in", res = 300)
+scores_format %>%
+  filter(horizon %in% c(6)) %>%
+  mutate(CO2Treat = case_match(CO2Treat,
+                               "Amb" ~ "Ambient~CO[2]",
+                               "Elev" ~ "Elevated~CO[2]")) %>%
+  mutate(deviation = observation - mean) %>%
+  filter(model_id == "climatology") %>%
+  mutate(Temp = as.factor(Temp)) %>%
+  ggplot(aes(x = Temp, 
+             y = deviation)) +
+  geom_jitter(aes(color = month(datetime), group = CO2Treat), 
+              width = 0.3,
+              size = 1) +
+  ggh4x::facet_nested(.~Veg+CO2Treat, 
+                      space = "free_x", scales = "free_x",
+                      labeller = label_parsed)+
+  scale_linetype_manual(values = c("solid", "31"), 
+                     labels = c("Ambient","Elevated"))+
+  scale_color_viridis_c(name = "Month")+
+  xlab("Temperature treatment\n(ºC above ambient)")+
+  ylab("Deviation from historical mean (µmol/m2/d)")+
+  theme_bw(base_size = 10)+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"),
         panel.grid.major.x = element_blank())
 dev.off()
 
@@ -156,34 +427,28 @@ scores_format %>%
   theme(strip.background = element_rect(fill = "white",
                                         color = "grey85"),
         legend.key.height = unit(0.7, 'lines'),
-        legend.text = element_text(margin = margin(t = 0, b = 0)),
+        legend.text = element_text(margin = ggplot2::margin(t = 0, b = 0)),
         panel.grid.major.x = element_blank())
 dev.off()
 
-jpeg("../figures/nonRMSE_all.jpg", width = 6, height = 5, units = "in", res = 300)
+jpeg("../figures/Forecast_sd.jpg", width = 6, height = 4, units = "in", res = 300)
 scores_format %>%
   filter(horizon %in% c(6)) %>%
   mutate(Treatment = paste(Temp, CO2Treat),
          Temp = as.factor(Temp)) %>%
   group_by(horizon, site_id, model_id, Temp, year, CO2Treat, Veg, Treatment) %>%
-  summarize(bias = mean(mean - observation, na.rm = T),
+  summarize(rmse = Metrics::rmse(observation, mean),
             crps = mean(crps, na.rm = T),
-            grmse = grmse(observation, mean),
-            r2_11 = 1-sum((mean - observation)^2)/sum((observation - mean(observation, na.rm = T))^2),
-            r2 = summary(lm(observation~mean))$r.squared,
-            rmse_mean = Metrics::rmse(observation, mean)/mean(observation),
-            #grmse_mean = grmse/exp(mean(log(observation))),
+            sd = mean(sd, na.rm = T),
+            n = n(),
             .groups = "drop") %>%
-  pivot_longer(c(crps, bias, grmse, r2, rmse_mean)) %>%
-  mutate(name = factor(name, levels = c("bias", "crps", "grmse", "r2","rmse_mean"),
-                       label = c("Bias", "CRPS", "Geometric RMSE", "R2","RMSE/mean")))%>%
   ggplot(aes(x = Temp, 
-             y = value)) +
+             y = sd)) +
   geom_jitter(aes(color = model_id, group = CO2Treat), 
-              width = 0.3,
+              position = position_jitterdodge(jitter.width = 1, dodge.width = 0.8),
               size = 1) +
-  geom_boxplot(outliers = F, alpha = 0, linewidth = 0.3) +
-  ggh4x::facet_nested(name~Veg+CO2Treat, space = "free_x", scales = "free")+
+  geom_boxplot(aes(linetype = CO2Treat), outliers = F, width = 0.8, alpha = 0, linewidth = 0.3) +
+  facet_grid(.~Veg, scale = "free_y")+
   scale_linetype_manual(values = c("solid", "31"), 
                      labels = c("Ambient","Elevated"))+
   scale_color_manual(values = colorspace::lighten(desat(viridis::viridis(10), 0.3), 0.6))+
@@ -196,7 +461,54 @@ scores_format %>%
   theme(strip.background = element_rect(fill = "white",
                                         color = "grey85"),
         legend.key.height = unit(0.7, 'lines'),
-        legend.text = element_text(margin = margin(t = 0, b = 0)),
+        legend.text = element_text(margin = ggplot2::margin(t = 0, b = 0)),
+        panel.grid.major.x = element_blank())
+dev.off()
+
+jpeg("../figures/nonRMSE_all.jpg", width = 6, height = 7, units = "in", res = 300)
+scores_format %>%
+  filter(horizon %in% c(6)) %>%
+  mutate(Temp = as.factor(Temp),
+         CO2Treat = case_match(CO2Treat,
+                               "Amb" ~ "Ambient~CO[2]",
+                               "Elev" ~ "Elevated~CO[2]")) %>%
+  group_by(horizon, site_id, model_id, Temp, year, CO2Treat, Veg) %>%
+  summarize(bias = mean(mean - observation, na.rm = T),
+            crps = mean(crps, na.rm = T),
+            grmse = grmse(observation, mean),
+            r2_11 = 1-sum((mean - observation)^2)/
+              sum((observation - mean(observation, na.rm = T))^2),
+            r2 = summary(lm(observation~mean))$r.squared,
+            sd = mean(sd, na.rm = T),
+            ign = mean(logs, na.rm = T),
+            rmse_mean = Metrics::rmse(observation, mean)/mean(observation),
+            grmse_mean = grmse/exp(mean(log(observation))),
+            .groups = "drop") %>%
+  pivot_longer(c(crps, bias, grmse, r2, rmse_mean, ign, sd)) %>%
+  mutate(name = factor(name, levels = c("bias", "crps", "grmse_mean", "r2","rmse_mean", "ign", "sd"),
+                       label = c("Bias", "CRPS", "Geometric~RMSE/mean", "R^{2}","RMSE/mean", "ignorange", "sd")))%>%
+  ggplot(aes(x = Temp, 
+             y = value)) +
+  geom_jitter(aes(color = model_id, group = CO2Treat), 
+              width = 0.3,
+              size = 1) +
+  geom_boxplot(outliers = F, alpha = 0, linewidth = 0.3) +
+  ggh4x::facet_nested(name~Veg+CO2Treat, 
+                      space = "free_x", scales = "free",
+                      labeller = label_parsed)+
+  scale_linetype_manual(values = c("solid", "31"), 
+                     labels = c("Ambient","Elevated"))+
+  scale_color_manual(values = colorspace::lighten(desat(viridis::viridis(10), 0.3), 0.6))+
+  xlab("Temperature treatment\n(ºC above ambient)")+
+  ylab("Forecast error")+
+  theme_bw(base_size = 10)+
+  guides(color = guide_legend(byrow = TRUE, title = "Model"),
+         linetype = guide_legend(byrow = TRUE,
+                     title = expression(CO[2]~Treatment)))+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"),
+        legend.key.height = unit(0.7, 'lines'),
+        legend.text = element_text(margin = ggplot2::margin(t = 0, b = 0)),
         panel.grid.major.x = element_blank())
 dev.off()
 
@@ -220,13 +532,13 @@ scores_format %>%
                      labels = c("Ambient","Elevated"))+
   scale_color_manual(values = colorspace::lighten(desat(viridis::viridis(10), 0.3), 0.6))+
   xlab("Temperature treatment\n(ºC above ambient)")+
-  ylab("Geometric RMSE of 6-month forecast\n(µmol/m2/d)")+
+  ylab(expression(atop("Error of 6-month forecast",(RMSE*";"~µmol/m^{2}/d))))+
   theme_bw(base_size = 10)+
   guides(color = guide_legend(byrow = TRUE, title = "Model"),
          linetype = guide_legend(byrow = TRUE,
                      title = expression(CO[2]~Treatment)))+
   theme(legend.key.height = unit(0.7, 'lines'),
-        legend.text = element_text(margin = margin(t = 0, b = 0)),
+        legend.text = element_text(margin = ggplot2::margin(t = 0, b = 0)),
         panel.grid.major.x = element_blank())
 dev.off()
 
@@ -252,7 +564,7 @@ scores_format %>%
                      labels = c("Ambient","Elevated"))+
   scale_color_manual(values = colorspace::lighten(desat(viridis::viridis(10), 0.3), 0.6))+
   xlab("Temperature treatment\n(ºC above ambient)")+
-  ylab("RMSE of 6-month forecast\n(µmol/m2/d)")+
+  ylab(expression(atop("Error of 6-month forecast",(RMSE*";"~µmol/m^{2}/d))))+
   theme_bw(base_size = 10)+
   guides(color = guide_legend(byrow = TRUE, title = "Model"),
          linetype = guide_legend(byrow = TRUE,
@@ -260,29 +572,63 @@ scores_format %>%
   theme(strip.background = element_rect(fill = "white",
                                         color = "grey85"),
         legend.key.height = unit(0.7, 'lines'),
-        legend.text = element_text(margin = margin(t = 0, b = 0)),
+        legend.text = element_text(margin = ggplot2::margin(t = 0, b = 0)),
         panel.grid.major.x = element_blank())
 dev.off()
 
-jpeg("../figures/mean and sd.jpg", res = 300, units = "in", width = 4, height = 4)
-scores_format %>%
-  filter(horizon == 6, year == 2024) %>%
-  group_by(horizon, site_id, Temp, year, CO2Treat, Veg, Transect) %>%
+#devtools::install_github("bilgecansen/rWPE")
+library(rWPE)
+test <- observations %>%
+  filter(!year(datetime) == 2016,
+         site_id == 313) %>%
+  complete(site_id, 
+           datetime = as.Date(paste0(rep(2017:2024, each = 12), "-", rep(1:12, 8),"-01"))) %>%
+  left_join(metadata, by = c("site_id" = "Plot")) %>%
+  group_by(site_id, Temp, CO2Treat, Veg, Transect) %>%
+  arrange(datetime)
+
+test %>%
+  ggplot(aes(x = datetime, y = observation))+
+  geom_point()+
+  geom_line()
+
+calculate_pe(test %>% arrange(datetime) %>% pull(observation), m = 3, tau = 6)
+calculate_pe(sin(1:1000), m = 2*pi)
+calculate_pe(sin(1:2400*(2*pi)/12), m = 12)
+plot(sin(1:240*(2*pi)/12), type = "l")
+
+jpeg("../figures/mean and sd.jpg", res = 300, units = "in", width = 4, height = 5)
+observations %>%
+  filter(!year(datetime) == 2016) %>%
+  complete(site_id, 
+           datetime = as.Date(paste0(rep(2017:2024, each = 12), "-", 
+                                     rep(1:12, 8),"-01"))) %>%
+  left_join(metadata, by = c("site_id" = "Plot")) %>%
+  group_by(site_id, Temp, CO2Treat, Veg, Transect) %>%
+  arrange(datetime) %>%
   summarize(mean = mean(observation, na.rm = T),
             sd = sd(observation, na.rm = T),
             cv = sd/mean,
+            WPE = calculate_pe(observation, m = 12, tau = 6)[1],
+            acf1 = acf(observation, 1, plot = F, 
+                       na.action = na.pass)$acf[2],
+            acf12 = acf(observation, 12, plot = F, 
+                        na.action = na.pass)$acf[13],
             n = n(),
             .groups = "drop") %>%
-  pivot_longer(cols = c(mean, sd, cv))%>%
+  pivot_longer(cols = c(mean, sd, WPE, acf1, acf12))%>%
   mutate(name = factor(name, 
-                       levels = c("mean", "sd", "cv"),
-                       labels = c("Mean", "SD", "CV"))) %>%
+                       levels = c("mean", "sd", "WPE", "acf1", "acf12"),
+                       labels = c("Mean", "SD", "WPE", "ACF1", "ACF12")),
+         CO2Treat = case_match(CO2Treat,
+                               "Amb" ~ "Ambient~CO[2]",
+                               "Elev" ~ "Elevated~CO[2]")) %>%
   ggplot(aes(x = as.factor(Temp), 
              y = value)) +
-  geom_point() +
+  geom_point(size = 0.8) +
   ggh4x::facet_nested(name~Veg+CO2Treat, 
                       labeller = label_parsed, 
-                      scales = "free_y")+
+                      scales = "free", space = "free_x")+
   ylab("Value")+
   scale_color_viridis_d()+
   xlab("Temperature treatment (ºC above ambient)")+
@@ -290,6 +636,39 @@ scores_format %>%
   theme(strip.background = element_rect(fill = "white",
                                         color = "grey85"))
 dev.off()
+
+observations %>%
+  filter(!year(datetime) == 2016) %>%
+  mutate(year = year(datetime)) %>%
+  complete(site_id, 
+           datetime = as.Date(paste0(rep(2017:2024, each = 12), "-", 
+                                     rep(1:12, 8),"-01"))) %>%
+  left_join(metadata, by = c("site_id" = "Plot")) %>%
+  group_by(site_id, Temp, CO2Treat, Veg, Transect, year) %>%
+  arrange(datetime) %>%
+  summarize(mean = mean(observation, na.rm = T),
+            sd = sd(observation, na.rm = T),
+            .groups = "drop") %>%
+  pivot_longer(cols = c(mean, sd))%>%
+  mutate(name = factor(name, 
+                       levels = c("mean", "sd"),
+                       labels = c("Mean", "SD")),
+         CO2Treat = case_match(CO2Treat,
+                               "Amb" ~ "Ambient~CO[2]",
+                               "Elev" ~ "Elevated~CO[2]")) %>%
+  ggplot(aes(x = as.factor(Temp), 
+             y = value)) +
+  geom_boxplot(outliers = F)+
+  geom_jitter(size = 0.8, alpha = 0.2, aes(shape = as.factor(Transect))) +
+  ggh4x::facet_nested(name~Veg+CO2Treat, 
+                      labeller = label_parsed, 
+                      scales = "free", space = "free_x")+
+  ylab("Value")+
+  scale_color_viridis_d()+
+  xlab("Temperature treatment (ºC above ambient)")+
+  theme_bw(base_size = 10)+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"))
 
 summary <- scores_format %>%
   filter(horizon %in% c(6)) %>%
@@ -314,6 +693,7 @@ summary$rmse[summary$Veg=="C3" & summary$Temp == 0 & summary$CO2Treat == "Elev"]
 ```{r}
 jpeg("../figures/Forecasts.jpg", width = 6.5, height = 4, units = "in", res = 300)
 scores_format %>%
+  filter(horizon == 6) %>%
   group_by(Veg, CO2Treat) %>%
   mutate(CO2Treat = case_match(CO2Treat,
                                "Amb" ~ "Ambient~CO[2]",
@@ -321,7 +701,6 @@ scores_format %>%
          Temp = paste0(Temp, "~degree~C"),
          Transect = ifelse(Transect > 3, Transect - 3, Transect),
          mod = paste(model_id, site_id))%>%
-  filter(horizon == 6) %>%
   ggplot(aes(x = datetime))+
   geom_ribbon(aes(ymin = mean - sd, ymax = mean + sd, fill = model_id), alpha = 0.1)+
   geom_line(aes(y = mean, color = model_id))+
@@ -338,37 +717,41 @@ scores_format %>%
                                         color = "grey85"),
         axis.title.x = element_blank(),
         legend.position = "bottom",
-        strip.text = element_text(margin = margin(0.1,0.1,0.1,0.1, "lines")))
+        strip.text = element_text(margin = ggplot2::margin(0.1,0.1,0.1,0.1, "lines")))
 dev.off()
 
-jpeg("../figures/Forecasts_freey.jpg", width = 10, height = 5, units = "in", res = 300)
+jpeg("../figures/Forecasts_freey.jpg", width = 7, height = 4, units = "in", res = 300)
 scores_format %>%
+  filter(horizon == 6,
+         CO2 == 0)%>%
   group_by(Veg, CO2Treat) %>%
   mutate(CO2Treat = case_match(CO2Treat,
                                "Amb" ~ "Ambient~CO[2]",
                                "Elev" ~ "Elevated~CO[2]"),
+         Veg = case_match(Veg,
+                          "C3" ~ "C[3]",
+                          "C4" ~ "C[4]"),
          Transect = ifelse(Transect > 3, Transect - 3, Transect),
          Temp = paste0(Temp, "~degree~C"),
          mod = paste(model_id, site_id))%>%
-  filter(horizon == 6) %>%
   ggplot(aes(x = datetime))+
+  #geom_ribbon(aes(ymin = mean - sd, ymax = mean + sd, fill = model_id), alpha = 0.1)+
   geom_line(aes(y = mean, color = model_id))+
   geom_point(aes(y = observation))+
-  ggh4x::facet_nested(Temp~Veg+CO2Treat+Transect, labeller = label_parsed, scales = "free_y", independent = "y")+
+  ggh4x::facet_nested(Temp~Veg+Transect, labeller = label_parsed, scales = "free_y", independent = "y")+
   scale_color_viridis_d(name = "Model")+
-  scale_fill_viridis_d(name = "Model")+
+  scale_fill_manual(values = desat(viridis::viridis(11), 0.3))+
   scale_x_date(date_breaks = "4 month", date_labels = "%b")+
   scale_y_continuous(n.breaks = 3)+
   theme_bw(base_size = 10) +
-  ylab("Methane flux (µmol/m2/d)")+
+  ylab(expression(atop("Methane flux",(µmol/m^{2}/d))))+
   theme(strip.background = element_rect(fill = "white",
                                         color = "grey85"),
         axis.title.x = element_blank(),
         legend.position = "bottom",
-        strip.text = element_text(margin = margin(0.1,0.1,0.1,0.1, "lines")))
+        strip.text = element_text(margin = ggplot2::margin(0.1,0.1,0.1,0.1, "lines")))
 dev.off()
 ```
-
 
 ### Relative to mean
 
@@ -407,12 +790,14 @@ scores_format %>%
             n = n(),
             .groups = "drop") %>%
   ggplot(aes(x = mean, y = rmse)) +
-  geom_point()+
+  geom_point(aes(color = as.factor(Temp), shape = CO2Treat))+
   geom_smooth()+
-  geom_abline()
+  geom_abline()+
+  facet_wrap(~Veg)
 ```
 
 Which is best?
+
 ```{r}
 scores_format %>%
   filter(horizon %in% c(6),
@@ -435,10 +820,65 @@ scores_format %>%
              x = n/tot*100, 
              fill = model_id)) +
   geom_col()+
-  xlab("Percent of forecasts that rank in the top 30% across all models")+
+  xlab("Percent of forecasts that rank in the top 30%\nacross all models by crps")+
   ggh4x::facet_nested(model_type~Temp, scales = "free_y", space = "free_y")+
   scale_fill_viridis_d()+
   theme_bw()+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"),
+        legend.position = "none",
+        axis.title.y = element_blank())
+
+scores_format %>%
+  filter(horizon %in% c(6),
+         CO2Treat=="Amb",
+         Veg == "C3") %>%
+  group_by(datetime, site_id, Temp, year, CO2Treat, Veg) %>%
+  mutate(error = abs(mean - observation)) %>%
+  arrange(error) %>%
+  mutate(Rank = min_rank(error),
+         n = n()) %>%
+  filter(n == 10) %>%
+  mutate(Rank_group = case_when(Rank %in% c(1,2,3) ~ "Top 30%",
+                                Rank %in% c(4,5,6,7) ~ "Middle",
+                                Rank %in% c(8,9,10) ~ "Bottom 30%")) %>%
+  group_by(Temp, year, CO2Treat, Veg, Rank_group, model_id, model_type) %>%
+  summarize(n = n()) %>%
+  group_by(Temp, year, CO2Treat, Veg, model_id, model_type) %>%
+  mutate(tot = sum(n)) %>%
+  filter(Rank_group == "Top 30%") %>%
+  ggplot(aes(y = model_id, 
+             x = n/tot*100, 
+             fill = model_id)) +
+  geom_col()+
+  xlab("Percent of forecasts that rank in the top 30%\nacross all models by accuracy")+
+  ggh4x::facet_nested(model_type~Temp, scales = "free_y", space = "free_y")+
+  scale_fill_viridis_d()+
+  theme_bw()+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"),
+        legend.position = "none",
+        axis.title.y = element_blank())
+
+scores_format %>%
+  filter(horizon %in% c(6),
+         CO2Treat=="Amb") %>%
+  group_by(datetime, site_id, Temp, year, CO2Treat, Veg) %>%
+  mutate(error = abs(mean - observation)) %>%
+  arrange(error) %>%
+  mutate(Rank = min_rank(error),
+         n = n()) %>%
+  filter(n == 10) %>%
+  group_by(Temp, year, CO2Treat, Veg, model_id, model_type) %>%
+  summarize(Rank = median(Rank)) %>%
+  ggplot(aes(color = model_id, 
+             x = Temp, 
+             y = Rank)) +
+  geom_smooth(method = "lm")+
+  xlab("Percent of forecasts that rank in the top 30%\nacross all models by accuracy")+
+  scale_fill_viridis_d()+
+  theme_bw()+
+  facet_grid(Veg~model_type) +
   theme(strip.background = element_rect(fill = "white",
                                         color = "grey85"),
         legend.position = "none",
@@ -484,27 +924,83 @@ scores_format %>%
   ggplot(aes(x = Temp, y = pct, color = model_id)) +
   geom_line(aes(lty = model_type))+
   scale_color_viridis_d()+
-  ggh4x::facet_nested(~Veg+CO2Treat)+
+  ggh4x::facet_nested(model_type~Veg+CO2Treat)+
   theme_bw()+
   ylab("Percent of forecasts with a lower\ncrps than the climatology model")+
   theme(strip.background = element_rect(fill = "white",
                                         color = "grey85"))
 
+jpeg("../figures/beating climatology.jpg", res = 300, units = "in", width = 5, height = 3)
 scores_format %>%
-  filter(horizon %in% c(6)) %>%
+  filter(horizon %in% c(6),
+         CO2Treat == "Amb") %>%
   group_by(datetime, site_id, Temp, year, CO2Treat, Veg) %>%
   mutate(climatology_score = abs(mean[model_id == "climatology"] - observation),
          beats_climatology = ifelse(abs(mean - observation) <= climatology_score, 1, 0)) %>%
   group_by(Temp, year, CO2Treat, Veg, model_id, model_type) %>%
-  summarize(pct = sum(beats_climatology)/n()) %>%
+  summarize(pct = sum(beats_climatology)/n()*100) %>%
   filter(!model_type == "climatology") %>%
-  ggplot(aes(x = Temp, y = pct, color = model_id)) +
-  geom_hline(yintercept = 0.5, color = 'grey')+
-  geom_line(alpha = 0.5)+
-  geom_point()+
-  scale_color_viridis_d()+
+  ggplot(aes(x = Temp, y = pct)) +
+  geom_line(aes(color = model_id))+
+  #geom_smooth(method="lm", color = "black")+
+  #geom_boxplot()+
+  geom_point(aes(color = model_id))+
+  scale_color_manual(values = viridis::viridis(11)[c(1,4:10)], name = "Model")+
   ylab("Percent of forecasts that are\nmore accurate than the climatology model")+
+  ggh4x::facet_nested(model_type~Veg)+
+  theme_bw()+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"),
+        legend.key.height = unit(0.7, 'lines'),
+        legend.text = element_text(margin = ggplot2::margin(t = 0, b = 0)),)
+dev.off()
+
+scores_format %>%
+  filter(horizon %in% c(6),
+         CO2Treat == "Amb") %>%
+  group_by(datetime, site_id, Temp, year, CO2Treat, Veg) %>%
+  mutate(climatology_score = abs(mean[model_id == "climatology"] - observation),
+         beats_climatology = ifelse(abs(mean - observation) <= climatology_score, 1, 0)) %>%
+  filter(!model_type == "climatology") %>%
+  group_by(Temp, year, CO2Treat, Veg, datetime) %>%
+  summarize(pct = sum(beats_climatology)/n()*100) %>%
+  ggplot(aes(x = datetime, y = pct, color = as.factor(Temp))) +
+  geom_smooth(se = F)+
+  #geom_smooth(method="lm", color = "black")+
+  #geom_boxplot()+
+  #scale_color_manual(values = viridis::viridis(11)[c(1,4:10)], name = "Model")+
+  ylab("Percent of forecasts that are\nmore accurate than the climatology model")+
+  ggh4x::facet_nested(.~Veg)+
+  theme_bw()+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"),
+        legend.key.height = unit(0.7, 'lines'),
+        legend.text = element_text(margin = ggplot2::margin(t = 0, b = 0)),)
+
+scores_format %>%
+  filter(horizon %in% c(6)) %>%
+  group_by(datetime, site_id, Temp, year, CO2Treat, Veg) %>%
+  mutate(error = abs(mean - observation)) %>%
+  arrange(error) %>%
+  mutate(Rank = min_rank(error),
+         n = n()) %>%
+  filter(n == 10) %>%
+  mutate(Rank_group = case_when(Rank %in% c(1,2,3) ~ "Top 30%",
+                                Rank %in% c(4,5,6,7) ~ "Middle",
+                                Rank %in% c(8,9,10) ~ "Bottom 30%")) %>%
+  group_by(Temp, year, CO2Treat, Veg, Rank_group, model_id, model_type) %>%
+  summarize(n = n()) %>%
+  group_by(Temp, year, CO2Treat, Veg, model_id, model_type) %>%
+  mutate(tot = sum(n)) %>%
+  filter(Rank_group == "Top 30%") %>%
+  ggplot(aes(x = Temp, 
+             y = n/tot*100, 
+             color = model_id)) +
+  geom_point()+
+  geom_line()+
+  ylab("Percent of forecasts that rank\nin the top 30% across all models\nby absolute error")+
   ggh4x::facet_nested(model_type~Veg+CO2Treat)+
+  scale_color_viridis_d()+
   theme_bw()+
   theme(strip.background = element_rect(fill = "white",
                                         color = "grey85"))
@@ -527,34 +1023,83 @@ scores_format %>%
   theme(strip.background = element_rect(fill = "white",
                                         color = "grey85"))
 
-jpeg("../figures/optimal model.jpg", res = 300, units = "in", width = 4, height = 3)
-scores_format %>%
+jpeg("../figures/optimal model.jpg", res = 300, units = "in", width = 5, height = 3)
+clim <- scores_format %>%
   filter(horizon %in% c(6)) %>%
-  group_by(Temp, year, CO2Treat, Veg, model_id, model_type) %>%
-  mutate(rmse = Metrics::rmse(observation, mean)) %>%
-  group_by(Temp, year, CO2Treat, Veg) %>%
+  mutate(CO2Treat = case_match(CO2Treat,
+                               "Amb" ~ "Ambient~CO[2]",
+                               "Elev" ~ "Elevated~CO[2]"),
+         model_type = sub(" ", "~", model_type)) %>%
+  group_by(Temp, year, CO2Treat, Veg, model_id, model_type, site_id) %>%
+  summarize(rmse = Metrics::rmse(observation, mean), .groups = "drop") %>%
+  group_by(Temp, year, CO2Treat, Veg, site_id) %>%
   mutate(clim_rmse = unique(rmse[model_id == "climatology"]),
-            rmse_relative = rmse/clim_rmse) %>%
+            rmse_relative = (rmse - clim_rmse) / clim_rmse) %>%
   filter(!model_type == "climatology") %>%
+  ungroup()
+
+clim %>%
+  mutate(Temp = as.factor(Temp)) %>%
+  filter(CO2Treat == "Ambient~CO[2]") %>%
   ggplot(aes(x = Temp, y = rmse_relative, color = model_id)) +
-  geom_hline(yintercept = 1, color = "grey50")+
-  geom_line(alpha = 0.5)+
-  geom_point()+
+  geom_hline(yintercept = 0, color = "grey50")+
+  #geom_smooth(se = F, method = "lm")+
+  geom_point(alpha = 0.3)+
+  geom_boxplot()+
   scale_color_viridis_d(name = "Model")+
   ylab("RMSE relative to climatology model")+
-  ggh4x::facet_nested(model_type~Veg+CO2Treat)+
+  xlab("Temperature treatment (ºC above ambient)")+
+  ggh4x::facet_grid2(Veg~model_type, labeller = label_parsed, scales = "free")+
+  #scale_color_manual(values = colorspace::lighten(desat(viridis::viridis(10), 0.3), 0.6))+
+  theme_bw(base_size = 10) +
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"),
+        legend.key.height = unit(0.7, 'lines'))
+dev.off()
+
+z_score <- function(x) {
+  (x - mean(x)) / sd(x)
+}
+
+rmse_med <- scores_format %>%
+  filter(horizon %in% c(6),
+         CO2Treat == "Amb") %>%
+  mutate(CO2Treat = case_match(CO2Treat,
+                               "Amb" ~ "Ambient~CO[2]",
+                               "Elev" ~ "Elevated~CO[2]"),
+         model_type = ifelse(model_type %in% c("time series", "climatology"), "empirical", model_type),
+         model_type = sub(" ", "~", model_type)
+         ) %>%
+  group_by(Temp, year, CO2Treat, Veg, model_id, model_type, Transect) %>%
+  mutate(rmse = Metrics::rmse(observation, mean)) %>%
+  group_by(Temp, year, CO2Treat, Veg, Transect) %>%
+  mutate(rmse_med = rmse / median(rmse))
+
+rmse_med %>%
+  ggplot(aes(x = Temp, y = rmse_med, color = model_id)) +
+  geom_hline(yintercept = 1, color = "grey50")+
+  geom_point(alpha = 0.5)+
+  geom_smooth(method = "lm", se = F)+
+  scale_color_viridis_d(name = "Model")+
+  ylab("RMSE / median RMSE")+
+  xlab("Temperature treatment (ºC above ambient)")+
+  ggh4x::facet_nested(Veg~model_id, labeller = label_parsed)+
   theme_bw(base_size = 10) +
   theme(strip.background = element_rect(fill = "white",
                                         color = "grey85"))
-dev.off()
-```
 
+mod_c3 <- lmerTest::lmer(rmse_med ~ Temp * model_id + (1|site_id), data = rmse_med %>% filter(Veg == "C3"))
+summary(mod_c3)
+
+clim_c3 <- lmerTest::lmer(rmse_relative ~ Temp * Veg * model_id + (1|site_id), data = clim %>% ungroup () %>% filter(CO2 == 0))
+summary(clim_c3)
+```
 
 Horizon
 
 ```{r}
+jpeg("../figures/horizon.jpg", res = 300, units = "in", width = 4, height = 4)
 scores_format %>%
-  filter(CO2Treat == "Amb") %>%
   group_by(horizon, site_id, Temp, year, CO2Treat, Veg) %>%
   mutate(mean_obs = mean(observation, na.rm = T),
          sd = sd(observation, na.rm = T),
@@ -565,62 +1110,232 @@ scores_format %>%
             mean = unique(mean_obs),
             n = n(),
             .groups = "drop") %>%
-  group_by(horizon, site_id, Temp, year, CO2Treat, Veg) %>%
-  mutate(climate_rmse = rmse[model_id == "climatology"]) %>%
-  filter(!model_type == "climatology") %>%
   ggplot(aes(x = horizon, 
-             y = rmse/climate_rmse)) +
-  geom_hline(yintercept = 1) +
-  #geom_point(aes(color = model_type)) +
-  geom_smooth(aes(color = model_type), se = F)+
-  facet_grid(Temp~Veg)+
+             y = rmse)) +
+  #geom_point(alpha = 0.1)+
+  geom_smooth()+
+  ggh4x::facet_nested(Temp+Veg+CO2Treat~model_type, scales = "free_y")+
   xlab("Horizon (months)")+
   scale_color_viridis_d()+
   theme_bw(base_size = 10)
+dev.off()
+```
 
-scores_format %>%
-  filter(CO2Treat == "Amb") %>%
-  group_by(horizon, site_id, Temp, year, CO2Treat, Veg) %>%
-  mutate(mean_obs = mean(observation, na.rm = T),
-            sd = sd(observation, na.rm = T),
-            n = n(),
-            .groups = "drop") %>%
-  group_by(horizon, site_id, model_id, Temp, year, CO2Treat, Veg, model_type) %>%
-  summarize(rmse = Metrics::rmse(observation, mean),
-            mean = unique(mean_obs),
-            n = n(),
-            .groups = "drop") %>%
+Stats
+
+```{r}
+relative <- scores_format %>%
+  filter(horizon %in% c(6)) %>%
+  mutate(CO2Treat = case_match(CO2Treat,
+                               "Amb" ~ "Ambient~CO[2]",
+                               "Elev" ~ "Elevated~CO[2]"),
+         model_type = sub(" ", "~", model_type)) %>%
+  group_by(Temp, year, CO2Treat, Veg, model_id, model_type) %>%
+  mutate(rmse = Metrics::rmse(observation, mean)) %>%
+  group_by(Temp, year, CO2Treat, Veg) %>%
+  mutate(clim_rmse = unique(rmse[model_id == "climatology"]),
+            rmse_relative = rmse/clim_rmse) %>%
+  filter(!model_type == "climatology",
+         CO2Treat == "Ambient~CO[2]")
+
+mod <- lmerTest::lmer(rmse_relative ~ Temp * Veg * model_type + (1|model_id) + (1|site_id), data = relative)
+summary(mod)
+
+rmse <- scores_format %>%
+  filter(horizon == 6) %>%
+  group_by(horizon, site_id, model_id, Temp, year, CO2Treat, Veg) %>%
+  summarize(rmse = log(Metrics::rmse(observation, mean)),
+            .groups = "drop")
+
+mod_c3 <- lmerTest::lmer(rmse ~ Temp * CO2Treat + (1|model_id) + (1|site_id), 
+                      data = rmse[rmse$Veg == "C3", ])
+summary(mod_c3)
+mod_c4 <- lmerTest::lmer(rmse ~ Temp + (1|model_id) + (1|site_id), 
+                      data = rmse[rmse$Veg == "C4", ])
+summary(mod_c4)
+mod_rmse_all <- lmerTest::lmer(rmse ~ Temp * Veg + (1|model_id) + (1|site_id), 
+                      data = rmse[rmse$CO2Treat == "Amb" & rmse$horizon == 6, ])
+summary(mod_rmse_all)
+
+#devtools::install_github("bilgecansen/rWPE")
+library(rWPE)
+pe <- observations %>%
+  left_join(metadata, by = c("site_id" = "Plot")) %>%
+  mutate(year = year(datetime)) %>%
+  filter(!year %in% c(2016)) %>%
+  group_by(site_id, Temp, CO2Treat, Veg) %>%
+  summarize(WPE = calculate_pe(observation, t = 6)[1])
+
+pe %>%
+  mutate(CO2Treat = case_match(CO2Treat,
+                               "Amb" ~ "Ambient~CO[2]",
+                               "Elev" ~ "Elevated~CO[2]")) %>%
   ggplot(aes(x = as.factor(Temp), 
-             y = rmse/mean)) +
-  geom_hline(yintercept = 1) +
-  geom_boxplot(aes(color = model_type), outliers = F) +
-  ggh4x::facet_grid2(horizon~Veg, scales = "free_y", independent = "y")+
-  xlab("Soil temperature (ºC above ambient)")+
+             y = WPE)) +
+  geom_point(size = 0.8) +
+  ggh4x::facet_nested(.~Veg+CO2Treat, 
+                      labeller = label_parsed, 
+                      scales = "free_x", space = "free_x")+
+  ylab("Weighted permutation entropy")+
   scale_color_viridis_d()+
-  theme_bw(base_size = 10)
+  xlab("Temperature treatment (ºC above ambient)")+
+  theme_bw(base_size = 10)+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"))
 ```
 
 ```{r}
+jpeg("../figures/confidence.jpg", res = 300, units = "in", width = 4, height = 4)
 scores_format %>%
-  filter(horizon == 6, year == 2024) %>%
-  group_by(horizon, site_id, Temp, year, CO2Treat, Veg) %>%
-  mutate(mean_obs = mean(observation, na.rm = T),
-            sd = sd(observation, na.rm = T),
-            n = n(),
-            .groups = "drop") %>%
-  group_by(horizon, site_id, model_id, Temp, year, CO2Treat, Veg, model_type) %>%
+  filter(horizon == 6) %>%
+  mutate(in_95 = observation > quantile02.5 & observation < quantile97.5,
+         in_80 = observation > quantile10 & observation < quantile90) %>%
+  group_by(Temp, CO2Treat, horizon, Veg, model_id) %>%
+  summarize(pct_95 = sum(in_95)/n()*100,
+            pct_80 = sum(in_80)/n()*100) %>%
+  pivot_longer(c(pct_80, pct_95)) %>%
+  mutate(Temp = as.factor(Temp)) %>%
+  ggplot(aes(x = Temp, 
+             y = value)) +
+  geom_hline(aes(yintercept = val), 
+             data = data.frame(val = c(80, 95), 
+                               name = c("pct_80", "pct_95")),
+             lty = "11")+
+  geom_jitter(aes(color = model_id, group = CO2Treat), 
+              width = 0.3,
+              size = 1) +
+  geom_boxplot(outliers = F, alpha = 0, linewidth = 0.3) +
+  ggh4x::facet_nested(name~Veg+CO2Treat, 
+                      space = "free_x", scales = "free",
+                      labeller = label_parsed)+
+  scale_linetype_manual(values = c("solid", "31"), 
+                     labels = c("Ambient","Elevated"))+
+  scale_color_manual(values = colorspace::lighten(desat(viridis::viridis(10), 0.3), 0.6))+
+  xlab("Temperature treatment\n(ºC above ambient)")+
+  ylab("Percentage of observations within confidence interval")+
+  theme_bw(base_size = 10)+
+  guides(color = guide_legend(byrow = TRUE, title = "Model"),
+         linetype = guide_legend(byrow = TRUE,
+                     title = expression(CO[2]~Treatment)))+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"),
+        legend.key.height = unit(0.7, 'lines'),
+        legend.text = element_text(margin = ggplot2::margin(t = 0, b = 0)),
+        panel.grid.major.x = element_blank())
+dev.off()
+```
+
+```{r}
+jpeg("../figures/RMSE_rep_comb.jpg", width = 5, height = 2.5, units = "in", res = 300)
+rmse <- scores_format_all %>%
+  mutate(Veg = case_match(Veg,
+                          "C3" ~ "C[3]",
+                          "C4" ~ "C[4]")) %>%
+  filter(CO2Treat == "Amb",
+         horizon == 6) %>%
+  group_by(horizon, model_id, Temp, CO2Treat, Veg, Type) %>%
   summarize(rmse = Metrics::rmse(observation, mean),
-            mean = unique(mean_obs),
             n = n(),
             .groups = "drop") %>%
-  group_by(horizon, model_id, year, CO2Treat, Veg, model_type) %>%
-  mutate(rmse_0 = mean(rmse[Temp == 0])) %>%
-  ggplot(aes(x = as.factor(Temp), 
-             y = rmse/rmse_0)) +
-  geom_hline(yintercept = 1) +
-  geom_boxplot(aes(color = model_type), outliers = F) +
-  ggh4x::facet_grid2(CO2Treat~Veg, scales = "free_y", independent = "y")+
-  xlab("Soil temperature (ºC above ambient)")+
-  scale_color_viridis_d()+
-  theme_bw(base_size = 10)
+  group_by(horizon, model_id, Temp, CO2Treat, Veg) %>%
+  mutate(rmse = (rmse[Type == "Rep_comb"] - rmse) / rmse * 100,
+         Temp = as.factor(Temp)
+         ) %>%
+  filter(!Type == "Rep_comb") 
+
+rmse %>%
+  ggplot(aes(x = Temp, 
+             y = rmse)) +
+  geom_hline(yintercept = 0, color = "grey50") +
+  geom_jitter(aes(color = model_id, group = CO2Treat), 
+              width = 0.3,
+              size = 1) +
+  geom_boxplot(outliers = F, alpha = 0, linewidth = 0.3) +
+  ggh4x::facet_nested(.~Veg, 
+                      space = "free_x", scales = "free_x",
+                      labeller = label_parsed)+
+  scale_linetype_manual(values = c("solid", "31"), 
+                     labels = c("Ambient","Elevated"))+
+  scale_color_manual(values = colorspace::lighten(desat(viridis::viridis(11), 0.3), 0.6))+
+  xlab("Temperature treatment (ºC above ambient)")+
+  ylab(expression(atop("Percent change in RMSE","using spatial average")))+
+  theme_bw(base_size = 10)+
+  guides(color = guide_legend(byrow = TRUE, title = "Model"))+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"),
+        legend.key.height = unit(0.7, 'lines'),
+        legend.text = element_text(margin = ggplot2::margin(t = 0, b = 0)),
+        panel.grid.major.x = element_blank())
+dev.off()
+
+
+jpeg("../figures/RMSE_ambCO2_comb_reps.jpg", width = 5, height = 2.5, units = "in", res = 300)
+rmse_raw <- scores_format_all %>%
+  filter(horizon %in% c(6),
+         CO2Treat == "Amb",
+         Type == "Rep_comb") %>%
+  mutate(CO2Treat = case_match(CO2Treat,
+                               "Amb" ~ "Ambient~CO[2]",
+                               "Elev" ~ "Elevated~CO[2]"),
+         Veg = case_match(Veg,
+                          "C3" ~ "C[3]",
+                          "C4" ~ "C[4]"),) %>%
+  group_by(horizon, site_id, model_id, Temp, year, CO2Treat, Veg) %>%
+  summarize(rmse = Metrics::rmse(observation, mean),
+            n = n(),
+            .groups = "drop") %>%
+  mutate(Temp = as.factor(Temp)) 
+
+rmse_raw %>%
+  ggplot(aes(x = Temp, 
+             y = rmse)) +
+  geom_jitter(aes(color = model_id, group = CO2Treat), 
+              width = 0.3,
+              size = 1) +
+  geom_boxplot(outliers = F, alpha = 0, linewidth = 0.3) +
+  ggh4x::facet_nested(.~Veg, 
+                      space = "free_x", scales = "free_x",
+                      labeller = label_parsed)+
+  scale_linetype_manual(values = c("solid", "31"), 
+                     labels = c("Ambient","Elevated"))+
+  scale_color_manual(values = colorspace::lighten(desat(viridis::viridis(11), 0.3), 0.6))+
+  xlab("Temperature treatment (ºC above ambient)")+
+  ylab(expression(atop("Error of 6-month forecast",(RMSE*";"~µmol/m^{2}/d))))+
+  theme_bw(base_size = 10)+
+  guides(color = guide_legend(byrow = TRUE, title = "Model"))+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"),
+        legend.key.height = unit(0.7, 'lines'),
+        legend.text = element_text(margin = ggplot2::margin(t = 0, b = 0)),
+        panel.grid.major.x = element_blank())
+dev.off()
+
+jpeg("../figures/RMSE_ambCO2_comb_reps_both.jpg", width = 5, height = 4, units = "in", res = 300)
+rmse %>%
+  mutate(type = paste0(expression(atop("Percent change in RMSE","using spatial average")))) %>%
+  rbind(rmse_raw %>% mutate(type = paste0(expression(atop("Error of 6-month forecast",(RMSE*";"~µmol/m^{2}/d)))))) %>%
+  mutate(type = factor(type, levels = rev(unique(type)))) %>%
+  ggplot(aes(x = Temp, 
+             y = rmse)) +
+  geom_hline(aes(yintercept = y), color = "grey50", data = data.frame(y = 0, type = paste0(expression(atop("Percent change in RMSE","using spatial average"))))) +
+  geom_jitter(aes(color = model_id, group = CO2Treat), 
+              width = 0.3,
+              size = 1) +
+  geom_boxplot(outliers = F, alpha = 0, linewidth = 0.3) +
+  ggh4x::facet_nested(type~Veg, 
+                      scales = "free",
+                      labeller = label_parsed)+
+  scale_linetype_manual(values = c("solid", "31"), 
+                     labels = c("Ambient","Elevated"))+
+  scale_color_manual(values = colorspace::lighten(desat(viridis::viridis(11), 0.3), 0.6))+
+  xlab("Temperature treatment (ºC above ambient)")+
+  ylab(expression(atop("Percent change in RMSE","using spatial average")))+
+  theme_bw(base_size = 10)+
+  guides(color = guide_legend(byrow = TRUE, title = "Model"))+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"),
+        legend.key.height = unit(0.7, 'lines'),
+        legend.text = element_text(margin = ggplot2::margin(t = 0, b = 0)),
+        panel.grid.major.x = element_blank())
+dev.off()
 ```

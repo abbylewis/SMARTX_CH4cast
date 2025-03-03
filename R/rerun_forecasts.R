@@ -9,7 +9,8 @@ rerun_forecasts <- function(forecast_model = forecast_model,
                             END, 
                             start_date = '2016-01-01',
                             end_date = "2025-01-01",
-                            use_ref_year = T
+                            use_ref_year = T,
+                            comb_reps = F
                             ) {
   ### Some code to fill in missing forecasts
   # Dates of forecasts 
@@ -61,7 +62,8 @@ rerun_forecasts <- function(forecast_model = forecast_model,
                            all_sites = all_sites,
                            sites = sites,
                            noaa = noaa,
-                           use_ref_year = use_ref_year)
+                           use_ref_year = use_ref_year,
+                           comb_reps = comb_reps)
     }, error=function(e){cat("ERROR with forecast generation:\n",conditionMessage(e), "\n")})
   }
 }

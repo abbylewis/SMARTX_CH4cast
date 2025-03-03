@@ -13,7 +13,8 @@ generate_tg_forecast <- function(forecast_date,
                                  noaa = T,
                                  save = T,
                                  plot = F,
-                                 use_ref_year = T) {
+                                 use_ref_year = T,
+                                 comb_reps = F) {
   
   forecast_date <- as.Date(forecast_date)
   
@@ -24,6 +25,13 @@ generate_tg_forecast <- function(forecast_date,
     group_by(site_id, datetime, project_id, duration, variable) %>%
     summarize(observation = mean(observation, na.rm = T), .groups = "drop") %>%
     filter(datetime <= forecast_date)
+  
+  if(comb_reps){
+    target <- target %>%
+      mutate(site_id = paste0(substr(site_id, 1, 1), substr(site_id, 3, 3))) %>%
+      group_by(site_id, datetime, project_id, duration, variable) %>%
+      summarize(observation = mean(observation, na.rm = T), .groups = "drop")
+  }
   
   ### Step 2: Set forecast specifications
   if(sites == "all"){
@@ -94,6 +102,7 @@ generate_tg_forecast <- function(forecast_date,
   # Write forecast to disk
   if(save){
     forecast_file <- paste0(here::here("outputs", paste0("monthly-", forecast_date, "-", model_id, ".csv.gz")))
+    if(comb_reps){forecast_file <- paste0(here::here("outputs", paste0("monthly-", forecast_date, "-", model_id, "-comb_reps.csv.gz")))}
     write_csv(forecast, forecast_file)
   }
   
