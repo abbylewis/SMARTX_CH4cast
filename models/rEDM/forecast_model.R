@@ -5,6 +5,7 @@
 #### Step 0: load packages
 library(tidyverse)
 library(rEDM)
+library(forecast)
 
 #### Step 1: Set model specifications
 model_id <- "rEDM"
