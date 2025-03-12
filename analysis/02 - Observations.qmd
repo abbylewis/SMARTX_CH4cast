@@ -1,0 +1,78 @@
+---
+title: "Forecast scores"
+format: html
+editor: visual
+---
+
+## Load data and packages
+
+```{r load}
+library(tidyverse)
+
+#L1
+observations <- read_csv("../L1_target.csv", show_col_types = F) %>%
+  mutate(datetime_observed = datetime,
+         datetime = as.Date(paste(year(datetime), month(datetime), "01", sep = "-"))) %>%
+  group_by(project_id, site_id, datetime, duration, variable) %>%
+  summarize(observation = mean(observation, na.rm = T),
+            dates_observed = list(unique(datetime_observed)),
+            .groups = "drop")
+
+#Metadata
+metadata <- read_csv(here::here("Raw_data", "plot_treatments.csv")) %>%
+  mutate(Type = "Separate")
+```
+
+Plot observations
+
+```{r plot}
+jpeg("../figures/Observations_amb.jpg", width = 5, height = 3, units = "in", res = 300)
+observations %>%
+  left_join(metadata, by = c("site_id"="Plot")) %>%
+  filter(CO2 == 0) %>%
+  group_by(Veg, CO2Treat) %>%
+  mutate(Veg = case_match(Veg,
+                          "C3" ~ "C[3]",
+                          "C4" ~ "C[4]"),
+         CO2Treat = case_match(CO2Treat,
+                               "Amb" ~ "Ambient~CO[2]",
+                               "Elev" ~ "Elevated~CO[2]"),
+         Temp = paste0("''+", Temp, "~degree~C"),
+         Transect = ifelse(Transect > 3, Transect - 3, Transect),
+         year=year(datetime),
+         yday = as.Date("2024-01-01") + yday(datetime) - 1) %>%
+  ggplot(aes(x = yday, y = observation))+
+  geom_line(aes(group = paste0(year, site_id), color = year == 2024, alpha = year == 2024))+
+  scale_alpha_manual(values = c(0.3, 1), labels = c("Training years (2017 to 2023)", "Forecast year (2024)"), name = "Year")+
+  scale_color_manual(values = c("grey50", "black"), labels = c("Training years (2017 to 2023)", "Forecast year (2024)"), name = "Year")+
+  #geom_line(aes(group = paste0(year, site_id)), data = . %>% filter(year == 2024), size = .8)+
+  ggh4x::facet_nested(Veg~Temp, labeller = label_parsed)+
+  #facet_wrap(~site_id)+
+  theme_bw() +
+  scale_x_date(date_breaks = "4 month", date_labels = "%b")+
+  scale_y_continuous(n.breaks = 3)+
+  theme_bw(base_size = 10) +
+  ylab(expression(atop(Methane~flux,(µmol/m^{2}/d))))+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"),
+        axis.title.x = element_blank(),
+        panel.grid.major.x = element_blank(),
+        legend.title = element_blank(),
+        legend.position = "bottom",
+        strip.text = element_text(margin = ggplot2::margin(0.1,0.1,0.1,0.1, "lines")))
+dev.off()
+```
+
+## Stats
+
+```{r stats}
+observations %>%
+  left_join(metadata, by = c("site_id"="Plot")) %>%
+  filter(month(datetime) == 8,
+         Veg == "C3",
+         CO2 == 0) %>%
+  group_by(Temp) %>%
+  summarize(min = min(observation),
+            max = max(observation),
+            sd = sd(observation))
+```

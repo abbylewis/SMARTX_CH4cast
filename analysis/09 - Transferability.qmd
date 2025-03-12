@@ -1,0 +1,191 @@
+---
+title: "Transferability"
+format: html
+editor: visual
+---
+
+```{r}
+#devtools::install_github("eco4cast/score4cast")
+library(score4cast)
+library(tidyverse)
+source("../R/score_all_forecasts.R")
+#Metrics
+
+#Forecasts
+outputs <- list.files("../outputs", full.names = T)
+outputs <- outputs[file.info(outputs)$size > 29] #Filter out empty files
+#forecasts <- read_csv(outputs, show_col_types = F)
+#oops-- model name in file does not include 2021 distinction
+load_forecast <- function(name){
+  model_id_new <- sub(".*-", "", sub(".csv.gz", "", name))
+  forecast <- read_csv(name, 
+                       col_types = "ccDDcncccn") %>%
+    mutate(model_id = model_id_new)
+}
+
+forecasts <- outputs %>%
+  map(load_forecast) %>%
+  bind_rows()
+
+#L1
+observations <- read_csv("../L1_target.csv", show_col_types = F) %>%
+  mutate(datetime_observed = datetime,
+         datetime = as.Date(paste(year(datetime), month(datetime), "01", sep = "-"))) %>%
+  group_by(project_id, site_id, datetime, duration, variable) %>%
+  summarize(observation = mean(observation),
+            dates_observed = list(unique(datetime_observed)),
+            .groups = "drop")
+
+#Metadata
+metadata <- read_csv(here::here("Raw_data", "plot_treatments.csv"))
+```
+
+```{r}
+obs_deid <- observations %>%
+  left_join(metadata, by = c("site_id" = "Plot")) %>%
+  mutate(Transect_obs = paste0("obs", Transect)) %>%
+  select(-site_id, -Transect)
+
+fore_deid <- forecasts %>%
+  left_join(metadata, by = c("site_id" = "Plot")) %>%
+  mutate(Transect_fore = paste0("fore", Transect)) %>%
+  select(-site_id, -Transect) 
+
+all <- fore_deid %>%
+  left_join(obs_deid, relationship = "many-to-many") %>%
+  filter(!is.na(observation),
+         !is.na(prediction)) %>%
+  mutate(Transfer = str_extract(Transect_obs, "[[:digit:]]") != 
+                             str_extract(Transect_fore, "[[:digit:]]"))
+
+desat <- function(cols, sat=0.5) {
+    X <- diag(c(1, sat, 1)) %*% rgb2hsv(col2rgb(cols))
+    hsv(X[1,], X[2,], X[3,])
+}
+
+transferability_sum <- all %>%
+  mutate(horizon = round(as.numeric(difftime(datetime,reference_datetime, units = "days")/30.5))) %>%
+  filter(horizon %in% c(6), parameter == "mu", !model_id %in% c("persistence", "met_lm_step")) %>%
+  mutate(CO2Treat = case_match(CO2Treat,
+                               "Amb" ~ "Ambient~CO[2]",
+                               "Elev" ~ "Elevated~CO[2]")) %>%
+  group_by(horizon, model_id, Temp, CO2Treat, Veg, Transect_obs, Transect_fore, Transfer) %>%
+  summarize(rmse = Metrics::rmse(observation, prediction),
+            n = n(),
+            .groups = "drop") %>%
+  group_by(horizon, model_id, Temp, CO2Treat, Veg, Transect_obs) %>%
+  mutate(Untransfered = unique(rmse[!Transfer]),
+         Relative = rmse - Untransfered)%>%
+  filter(Transfer) %>%
+  #group_by(horizon, model_id, Temp, CO2Treat, Veg) %>%
+  #summarize(Relative = mean(Relative, na.rm= T)) %>%
+  ungroup()
+
+transferability_sum %>%
+  mutate(Temp = as.factor(Temp)) %>%
+  ggplot(aes(x = Temp, 
+             y = Relative)) +
+  geom_jitter(aes(color = model_id, group = CO2Treat), 
+              width = 0.3,
+              size = 1) +
+  geom_boxplot(outliers = F, alpha = 0, linewidth = 0.3) +
+  ggh4x::facet_nested(.~Veg+CO2Treat, 
+                      space = "free_x", scales = "free_x",
+                      labeller = label_parsed)+
+  scale_linetype_manual(values = c("solid", "31"), 
+                     labels = c("Ambient","Elevated"))+
+  scale_color_manual(values = colorspace::lighten(desat(viridis::viridis(11), 0.3), 0.6))+
+  xlab("Temperature treatment\n(ºC above ambient)")+
+  ylab("RMSE of transfered - original forecast\n(µmol/m2/d)")+
+  theme_bw(base_size = 10)+
+  guides(color = guide_legend(byrow = TRUE, title = "Model"))+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"),
+        legend.key.height = unit(0.7, 'lines'),
+        legend.text = element_text(margin = ggplot2::margin(t = 0, b = 0)),
+        panel.grid.major.x = element_blank())
+
+
+library(lmerTest)
+mod_c3 <- lmerTest::lmer(Relative ~ Temp * CO2Treat + (1|model_id) + (1|Transect_obs), 
+                      data = transferability_sum[transferability_sum$Veg == "C3", ])
+summary(mod_c3)
+
+mod_c4 <- lmerTest::lmer(Relative ~ Temp + (1|model_id), 
+                      data = transferability_sum[transferability_sum$Veg == "C4", ])
+summary(mod_c4)
+
+mod_both <- lmerTest::lmer(Relative ~ Temp * Veg + (1|model_id) + (1|Transect_obs), 
+                      data = transferability_sum[transferability_sum$CO2Treat == "Ambient~CO[2]", ])
+summary(mod_both)
+
+transferability_sum %>%
+  mutate(Temp = as.factor(Temp)) %>%
+  filter(CO2Treat == "Ambient~CO[2]") %>%
+  ggplot(aes(x = Temp, 
+             y = Relative)) +
+  geom_jitter(aes(color = model_id, group = CO2Treat), 
+              width = 0.3,
+              size = 1) +
+  geom_boxplot(outliers = F, alpha = 0, linewidth = 0.3) +
+  ggh4x::facet_nested(.~Veg, 
+                      space = "free_x", scales = "free_x",
+                      labeller = label_parsed)+
+  scale_linetype_manual(values = c("solid", "31"), 
+                     labels = c("Ambient","Elevated"))+
+  scale_color_manual(values = colorspace::lighten(desat(viridis::viridis(10), 0.3), 0.6))+
+  xlab("Temperature treatment\n(ºC above ambient)")+
+  ylab("RMSE of transfered - original forecast\n(µmol/m2/d)")+
+  theme_bw(base_size = 10)+
+  guides(color = guide_legend(byrow = TRUE, title = "Model"))+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"),
+        legend.key.height = unit(0.7, 'lines'),
+        legend.text = element_text(margin = ggplot2::margin(t = 0, b = 0)),
+        panel.grid.major.x = element_blank())
+
+
+transferability_sum <- all %>%
+  mutate(horizon = round(as.numeric(difftime(datetime,reference_datetime, units = "days")/30.5))) %>%
+  filter(horizon %in% c(6), parameter == "mu", !model_id %in% c("persistence", "met_lm_step")) %>%
+  mutate(CO2Treat = case_match(CO2Treat,
+                               "Amb" ~ "Ambient~CO[2]",
+                               "Elev" ~ "Elevated~CO[2]")) %>%
+  group_by(horizon, model_id, Temp, CO2Treat, Veg, Transect_obs, Transect_fore, Transfer) %>%
+  summarize(rmse = Metrics::rmse(observation, prediction),
+            n = n(),
+            .groups = "drop") %>%
+  group_by(horizon, Temp, CO2Treat, Veg, Transect_obs, Transect_fore, Transfer) %>%
+  mutate(Clim = unique(rmse[model_id == "climatology"]),
+         Relative = rmse - Clim)%>%
+  ungroup()
+
+mod_both <- lmerTest::lmer(Relative ~ Temp * Veg + (1|model_id) + (1|Transect_obs), 
+                      data = transferability_sum[transferability_sum$CO2Treat == "Ambient~CO[2]", ])
+summary(mod_both)
+
+transferability_sum %>%
+  mutate(Temp = as.factor(Temp)) %>%
+  filter(CO2Treat == "Ambient~CO[2]") %>%
+  ggplot(aes(x = Temp, 
+             y = Relative)) +
+  geom_jitter(aes(color = model_id, group = CO2Treat), 
+              width = 0.3,
+              size = 1) +
+  geom_boxplot(outliers = F, alpha = 0, linewidth = 0.3) +
+  ggh4x::facet_nested(.~Veg, 
+                      space = "free_x", scales = "free_x",
+                      labeller = label_parsed)+
+  scale_linetype_manual(values = c("solid", "31"), 
+                     labels = c("Ambient","Elevated"))+
+  scale_color_manual(values = colorspace::lighten(desat(viridis::viridis(10), 0.3), 0.6))+
+  xlab("Temperature treatment\n(ºC above ambient)")+
+  ylab("RMSE of transfered - climatology\n(µmol/m2/d)")+
+  theme_bw(base_size = 10)+
+  guides(color = guide_legend(byrow = TRUE, title = "Model"))+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"),
+        legend.key.height = unit(0.7, 'lines'),
+        legend.text = element_text(margin = ggplot2::margin(t = 0, b = 0)),
+        panel.grid.major.x = element_blank())
+```

@@ -38,6 +38,9 @@ rerun_forecasts <- function(forecast_model = forecast_model,
     
     if (required_forecasts[i,"monthly"]) {
       all_modified <- submissions[grepl(forecast_file, submissions)]
+      if(comb_reps){
+        all_modified <- all_modified[grepl("comb_reps", all_modified)]
+      }
       #Recently modified?
       modified <- max(as_datetime(file.info(all_modified)$mtime))
       required_forecasts[i,"monthly"] <- ifelse(modified >= END, T, F)

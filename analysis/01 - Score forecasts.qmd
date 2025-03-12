@@ -1,0 +1,87 @@
+---
+title: "Score forecasts"
+format: html
+editor: visual
+---
+
+## Load data and packages
+
+```{r load}
+#devtools::install_github("eco4cast/score4cast")
+library(score4cast)
+library(tidyverse)
+library(lmerTest)
+source("../R/score_all_forecasts.R")
+#Metrics
+
+#Load forecasts
+outputs <- list.files("../outputs", full.names = T)
+outputs <- outputs[file.info(outputs)$size > 29] #Filter out empty files
+forecasts <- read_csv(outputs, show_col_types = F)
+
+#Load observations
+observations <- read_csv("../L1_target.csv", show_col_types = F) %>%
+  mutate(datetime_observed = datetime,
+         datetime = as.Date(paste(year(datetime), month(datetime), "01", sep = "-"))) %>%
+  group_by(project_id, site_id, datetime, duration, variable) %>%
+  summarize(observation = mean(observation, na.rm = T),
+            dates_observed = list(unique(datetime_observed)),
+            .groups = "drop")
+
+#Add averages across reps
+observations2 <- observations %>%
+  mutate(site_id = paste0(substr(site_id, 1, 1), substr(site_id, 3, 3))) %>%
+  group_by(project_id, site_id, datetime, duration, variable) %>%
+  summarize(observation = mean(observation, na.rm = T),
+            .groups = "drop")
+
+#Combine
+observations_all = observations  %>%
+  bind_rows(observations2 %>%
+  mutate(site_id = as.numeric(site_id)))
+```
+
+## Score forecasts
+
+```{r score}
+scores <- score_all_forecasts(forecasts, observations_all)
+```
+
+## Format for downstream analysis
+
+```{r}
+scores_format_all <- scores %>%
+  filter(horizon > 0, !model_id %in% c("persistence", "met_lm_step", 
+                                       "randomForestLog", "cwae", "lasso", 
+                                       "ridge")) %>%
+  mutate(horizon = round(as.numeric(
+    difftime(datetime, reference_datetime, units = "days")/30.5))) %>%
+  left_join(metadata_all, by = c("site_id" = "Plot")) %>%
+  mutate(year = year(datetime),
+         model_type = ifelse(model_id %in% c("auto.arima", "ets", "prophet", 
+                                             "rEDM"),
+                             "time series",
+                             NA),
+         model_type = ifelse(model_id %in% c("climatology"),
+                             "climatology",
+                             model_type),
+         model_type = ifelse(model_id %in% c("randomForest", "brnn", "XGBoost",
+                                             "svm", "elasticNet"),
+                             "machine learning",
+                             model_type),
+         model_id = case_match(model_id,
+                               "climatology" ~ "Climatology",
+                               "auto.arima" ~ "TS: ARIMA",
+                               "ets" ~ "TS: ETS",
+                               "prophet" ~ "TS: Prophet",
+                               "rEDM" ~ "TS: EDM",
+                               "elasticNet" ~ "TS: Elastic Net",
+                               "randomForest" ~ "ML: RF",
+                               "brnn" ~ "ML: BRNN",
+                               "XGBoost" ~ "ML: XGBoost",
+                               "svm" ~ "ML: SVM")) %>%
+  filter(year %in% c(2024))
+
+write_csv(scores_format_all, "scores_format_all.csv")
+```
+

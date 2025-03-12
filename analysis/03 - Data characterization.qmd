@@ -1,0 +1,195 @@
+---
+title: "Forecast scores"
+format: html
+editor: visual
+---
+
+## Load data and packages
+
+```{r}
+library(hydrostats)
+library(tidyverse)
+#devtools::install_github("bilgecansen/rWPE")
+library(rWPE)
+
+#L1
+observations <- read_csv("../L1_target.csv", show_col_types = F) %>%
+  mutate(datetime_observed = datetime,
+         datetime = as.Date(paste(year(datetime), month(datetime), "01", sep = "-"))) %>%
+  group_by(project_id, site_id, datetime, duration, variable) %>%
+  summarize(observation = mean(observation, na.rm = T),
+            dates_observed = list(unique(datetime_observed)),
+            .groups = "drop")
+
+#Metadata
+metadata <- read_csv(here::here("Raw_data", "plot_treatments.csv")) %>%
+  mutate(Type = "Separate")
+```
+
+## Create necessary functions
+
+```{r}
+calc_colwells_p <- function(data, breaks){
+  reformat <- data %>%
+    mutate(Date = format(datetime, "%d/%m/%Y")) %>%
+    ungroup() %>%
+    rename(Q = observation) %>%
+    select(Date, Q) %>%
+    data.frame() %>%
+    ts.format()
+  
+  p <- colwells_asl(reformat, breaks = breaks, indices.only = T)
+  return(p)
+}
+
+#Modified Colwells function
+colwells_asl <- function (flow.ts, fn = "mean", breaks = NULL,
+                          base.binning = 2, base.entropy = 2, 
+                          indices.only = FALSE) {
+  s = length(breaks + 1)
+  fn <- match.fun(fn)
+  flow.ts$month <- factor(strftime(flow.ts[, "Date"], format = "%m"))
+  flow.ts$year <- factor(strftime(flow.ts[, "Date"], format = "%Y"))
+  flow.ts.monthly <- aggregate(Q ~ month + year, flow.ts, fn, 
+                               na.rm = TRUE)
+  flow.ts.monthly$flow.class <- cut(flow.ts.monthly$Q, breaks = breaks, 
+                                    right = FALSE, include.lowest = TRUE)
+  flow.table <- with(flow.ts.monthly, table(flow.class, 
+                                            month))
+  pbreaks <- "see Table"
+  X <- apply(flow.table, 2, sum, na.rm = T)
+  Y <- apply(flow.table, 1, sum, na.rm = T)
+  Z <- sum(flow.table, na.rm = TRUE)
+  HX <- -1 * sum((X/Z) * log(X/Z, base = base.entropy), na.rm = TRUE)
+  HY <- -1 * sum((Y/Z) * log(Y/Z, base = base.entropy), na.rm = TRUE)
+  HXY <- -1 * sum((flow.table/Z) * log(flow.table/Z, base = base.entropy), 
+                  na.rm = TRUE)
+  P <- round(1 - (HXY - HX)/log(s, base = base.binning), 2)
+  C <- round(1 - HY/log(s, base = base.binning), 2)
+  M <- round((HX + HY - HXY)/log(s, base = base.binning), 2)
+  if (indices.only == TRUE) {
+    return(data.frame(P = P, C = C, M = M, CP = C/P, MP = M/P))
+  }
+  else {
+    return(list(breaks = pbreaks, flow.table = flow.table, 
+                P = P, C = C, M = M, CP = C/P, MP = M/P))
+  }
+}
+```
+
+## Colwell's statistics
+
+```{r}
+col_calcs <- observations %>%
+  filter(!year(datetime) == 2016) %>%
+  complete(site_id, 
+           datetime = as.Date(paste0(rep(2017:2024, each = 12), "-", 
+                                     rep(1:12, 8),"-01"))) %>%
+  left_join(metadata, by = c("site_id" = "Plot")) %>%
+  filter(CO2Treat == "Amb") %>%
+  mutate(Veg = case_match(Veg,
+                          "C3" ~ "C[3]",
+                          "C4" ~ "C[4]"),
+         breaks = list(seq(min(observation, na.rm = T), 
+                           max(observation, na.rm = T), length.out = 11)),
+         breaks_log = list(exp(seq(log(1), 
+                                   log(max(observation, na.rm = T) - 
+                                         min(observation, na.rm = T) + 1), 
+                                   length.out = 11)))) %>%
+  group_by(site_id, Temp, CO2Treat, Veg, Transect, breaks, breaks_log) %>%
+  arrange(datetime) %>%
+  select(datetime, observation) %>%
+  nest() 
+  
+jpeg("../figures/Colwells_metrics.jpg", res = 300, units = "in", width = 3, height = 3.5)
+col_calcs %>%
+  reframe(calc_colwells_p(data.frame(data), breaks = unlist(breaks))) %>%
+  pivot_longer(P:MP) %>%
+  filter(name %in% c("C", "M", "P")) %>%
+  mutate(name = factor(name, 
+                       levels = c("C", "M", "P"),
+                       labels = c("Constancy", 
+                                  "Contingency", 
+                                  "Predictability"))) %>%
+  ggplot(aes(x = as.factor(Temp), 
+             y = value)) +
+  geom_point(size = 0.8) +
+  ggh4x::facet_nested(name~Veg, 
+                      labeller = label_parsed, 
+                      scales = "free", space = "free_x")+
+  ylab("Value")+
+  scale_color_viridis_d()+
+  xlab("Temperature treatment (ºC above ambient)")+
+  theme_bw(base_size = 10)+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"))
+dev.off()
+
+jpeg("../figures/Colwells_metrics_log_intervals.jpg", res = 300, units = "in", width = 3, height = 3.5)
+col_calcs %>%
+  reframe(calc_colwells_p(data.frame(data), breaks = unlist(breaks_log))) %>%
+  pivot_longer(P:MP) %>%
+  filter(name %in% c("C", "M", "P")) %>%
+  mutate(name = factor(name, 
+                       levels = c("C", "M", "P"),
+                       labels = c("Constancy", 
+                                  "Contingency", 
+                                  "Predictability"))) %>%
+  ggplot(aes(x = Temp, 
+             y = value)) +
+  geom_point(size = 0.8) +
+  ggh4x::facet_nested(name~Veg, 
+                      labeller = label_parsed, 
+                      scales = "free", space = "free_x")+
+  ylab("Value")+
+  scale_color_viridis_d()+
+  xlab("Temperature treatment (ºC above ambient)")+
+  theme_bw(base_size = 10)+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"))
+dev.off()
+```
+
+## Other statistics
+
+```{r}
+jpeg("../figures/mean and sd.jpg", res = 300, units = "in", width = 4, height = 5)
+observations %>%
+  filter(!year(datetime) == 2016) %>%
+  complete(site_id, 
+           datetime = as.Date(paste0(rep(2017:2024, each = 12), "-", 
+                                     rep(1:12, 8),"-01"))) %>%
+  left_join(metadata, by = c("site_id" = "Plot")) %>%
+  group_by(site_id, Temp, CO2Treat, Veg, Transect) %>%
+  arrange(datetime) %>%
+  summarize(mean = mean(observation, na.rm = T),
+            sd = sd(observation, na.rm = T),
+            cv = sd/mean,
+            WPE = calculate_pe(observation, m = 3, tau = 12)[1],
+            acf1 = acf(observation, 1, plot = F, 
+                       na.action = na.pass)$acf[2],
+            acf12 = acf(observation, 12, plot = F, 
+                        na.action = na.pass)$acf[13],
+            n = n(),
+            .groups = "drop") %>%
+  pivot_longer(cols = c(mean, sd, WPE, acf1, acf12))%>%
+  mutate(name = factor(name, 
+                       levels = c("mean", "sd", "WPE", "acf1", "acf12"),
+                       labels = c("Mean", "SD", "WPE", "ACF1", "ACF12")),
+         CO2Treat = case_match(CO2Treat,
+                               "Amb" ~ "Ambient~CO[2]",
+                               "Elev" ~ "Elevated~CO[2]")) %>%
+  ggplot(aes(x = as.factor(Temp), 
+             y = value)) +
+  geom_point(size = 0.8) +
+  ggh4x::facet_nested(name~Veg+CO2Treat, 
+                      labeller = label_parsed, 
+                      scales = "free", space = "free_x")+
+  ylab("Value")+
+  scale_color_viridis_d()+
+  xlab("Temperature treatment (ºC above ambient)")+
+  theme_bw(base_size = 10)+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"))
+dev.off()
+```

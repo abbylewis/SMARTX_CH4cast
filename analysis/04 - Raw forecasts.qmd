@@ -1,0 +1,52 @@
+---
+title: "Forecast scores"
+format: html
+editor: visual
+---
+
+## Load data
+
+```{r}
+library(tidyverse)
+
+#Forecasts
+outputs <- list.files("../outputs", full.names = T)
+outputs <- outputs[file.info(outputs)$size > 29] #Filter out empty files
+forecasts <- read_csv(outputs, show_col_types = F)
+```
+
+## Plot
+
+```{r}
+jpeg("../figures/Forecasts_freey.jpg", width = 7, height = 4, units = "in", res = 300)
+scores_format %>%
+  filter(horizon == 6,
+         CO2 == 0)%>%
+  group_by(Veg, CO2Treat) %>%
+  mutate(CO2Treat = case_match(CO2Treat,
+                               "Amb" ~ "Ambient~CO[2]",
+                               "Elev" ~ "Elevated~CO[2]"),
+         Veg = case_match(Veg,
+                          "C3" ~ "C[3]",
+                          "C4" ~ "C[4]"),
+         Transect = ifelse(Transect > 3, Transect - 3, Transect),
+         Temp = paste0("''+", Temp, "~degree~C"),
+         mod = paste(model_id, site_id))%>%
+  ggplot(aes(x = datetime))+
+  #geom_ribbon(aes(ymin = mean - sd, ymax = mean + sd, fill = model_id), alpha = 0.1)+
+  geom_line(aes(y = mean, color = model_id))+
+  geom_point(aes(y = observation))+
+  ggh4x::facet_nested(Temp~Veg+Transect, labeller = label_parsed, scales = "free_y", independent = "y")+
+  scale_color_viridis_d(name = "Model")+
+  scale_fill_manual(values = desat(viridis::viridis(11), 0.3))+
+  scale_x_date(date_breaks = "4 month", date_labels = "%b")+
+  scale_y_continuous(n.breaks = 3)+
+  theme_bw(base_size = 10) +
+  ylab(expression(atop("Methane flux",(µmol/m^{2}/d))))+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"),
+        axis.title.x = element_blank(),
+        legend.position = "bottom",
+        strip.text = element_text(margin = ggplot2::margin(0.1,0.1,0.1,0.1, "lines")))
+dev.off()
+```

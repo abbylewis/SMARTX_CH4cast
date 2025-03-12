@@ -1,7 +1,6 @@
 # brnn model
 # written by ASL
 
-
 #### Step 0: load packages
 library(tidyverse)
 library(caret)
