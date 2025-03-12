@@ -156,7 +156,7 @@ transferability_sum <- all %>%
             n = n(),
             .groups = "drop") %>%
   group_by(horizon, Temp, CO2Treat, Veg, Transect_obs, Transect_fore, Transfer) %>%
-  mutate(Clim = unique(rmse[model_id == "climatology"]),
+  mutate(Clim = unique(rmse[model_id == "Climatology"]),
          Relative = rmse - Clim)%>%
   ungroup()
 

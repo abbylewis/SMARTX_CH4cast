@@ -4,8 +4,14 @@ format: html
 editor: visual
 ---
 
+## Load data and packages
+
 ```{r}
+#Packages
 library(tidyverse)
+library(randomForest)
+
+#Observation data
 observations <- read_csv("../L1_target.csv", show_col_types = F) %>%
   mutate(datetime_observed = datetime,
          datetime = as.Date(paste(year(datetime), month(datetime), "01", sep = "-"))) %>%
@@ -13,15 +19,12 @@ observations <- read_csv("../L1_target.csv", show_col_types = F) %>%
   summarize(observation = mean(observation, na.rm = T),
             dates_observed = list(unique(datetime_observed)),
             .groups = "drop")
-observations2 <- observations %>%
-  mutate(site_id = paste0(substr(site_id, 1, 1), substr(site_id, 3, 3))) %>%
-  group_by(project_id, site_id, datetime, duration, variable) %>%
-  summarize(observation = mean(observation, na.rm = T),
-            .groups = "drop")
 
-metadata <- read_csv(here::here("Raw_data", "plot_treatments.csv")) %>%
+#Metadata
+metadata <- read_csv(here::here("Raw_data", "plot_treatments.csv"), show_col_types = F) %>%
   mutate(Type = "Separate")
 
+#Met drivers
 noaa_past_mean <- read_csv(here::here("met_downloads",
                                         "monthly_forecasts.csv"),
                              show_col_types = F) %>%
@@ -29,22 +32,29 @@ noaa_past_mean <- read_csv(here::here("met_downloads",
     group_by(datetime, variable) %>%
     summarize(prediction = mean(prediction, na.rm = T), .groups = "drop") %>%
     pivot_wider(names_from = "variable", values_from = "prediction")
+```
 
-library(randomForest)
+## Random forest
+
+```{r}
 importance_df <- function(rf_output){
   out <- data.frame(importance(rf_output))
   out$name <- row.names(out)
   return(out)
 }
 
-pairs(noaa_past_mean)
-
+png("../figures/RF_drivers.png", res = 300, width = 5, height = 3, units = "in")
 observations %>%
   left_join(noaa_past_mean) %>%
   mutate(site_id = as.numeric(site_id)) %>%
   left_join(metadata, by = c("site_id" = "Plot")) %>%
   filter(CO2Treat == "Amb") %>%
-  group_by(Veg, Temp, site_id) %>%
+  mutate(Transect = as.factor(ifelse(Transect > 3, Transect - 3, Transect)),
+         Veg = case_match(Veg,
+                          "C3" ~ "C[3]",
+                          "C4" ~ "C[4]"),
+         Temp = paste0("''+", Temp, "~degree~C")) %>%
+  group_by(Veg, Temp, site_id, Transect) %>%
   reframe(importance_df(randomForest::randomForest(observation ~ 
                                         Temp_K * 
                                         SolarRad_Wm2 * 
@@ -52,11 +62,27 @@ observations %>%
                                         WindSpeed_ms *
                                         Pressure_Pa,
                                         importance = T))) %>%
-  ggplot(aes(x = X.IncMSE, y = name, color = as.factor(site_id)))+
+  mutate(name = case_match(name,
+                           "Temp_K" ~ "Air temperature",
+                           "SolarRad_Wm2" ~ "Solar radiation",
+                           "PrecipRate_ms" ~ "Precipitation",
+                           "WindSpeed_ms" ~ "Wind speed",
+                           "Pressure_Pa" ~ "Air pressure")) %>%
+  ggplot(aes(x = X.IncMSE, y = name, shape = Transect))+
   geom_point()+
-  ggh4x::facet_nested(Veg~Temp)+
-  theme(legend.position = "none")
+  ggh4x::facet_nested(Veg~Temp, labeller = label_parsed)+
+  theme_bw(base_size = 10)+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"),
+        legend.position = "bottom",
+        axis.title.y = element_blank())+
+  xlab("% increase in MSE omitting this covariate")
+dev.off()
+```
 
+## ARIMA
+
+```{r}
 obs_arima = observations |>
     complete(datetime = seq.Date(from = min(datetime), 
                                  to = max(datetime),
@@ -72,17 +98,31 @@ arima_res <- obs_arima %>%
   mutate(site_id = as.numeric(site_id)) %>%
   left_join(metadata, by = c("site_id" = "Plot")) %>%
   filter(CO2Treat == "Amb") %>%
-  group_by(Veg, Temp, site_id) %>%
+  group_by(Veg, Temp, site_id, Transect) %>%
   reframe(arima_df(forecast::auto.arima(ts(observation, frequency = 12), D = 1))) %>%
   pivot_longer(sar1:ma2) 
 
+png("../figures/ARIMA_drivers.png", res = 300, width = 4, height = 6, units = "in")
 arima_res %>%
-  mutate(value = ifelse(is.na(value), 0, value),
-         Temp = as.numeric(Temp)) %>%
-  ggplot(aes(x = Temp, y = value))+
-  geom_hline(yintercept = 0) +
+  mutate(#value = ifelse(is.na(value), 0, value),
+         Temp = as.factor(Temp),
+         Transect = as.factor(ifelse(Transect > 3, Transect - 3, Transect)),
+         Veg = case_match(Veg,
+                          "C3" ~ "C[3]",
+                          "C4" ~ "C[4]"),
+         Type = ifelse(grepl("s", name), "Seasonal", "Non-seasonal"),
+         name = (sub("s", "", name))) %>%
+  ggplot(aes(x = Temp, y = value, shape = Transect))+
+  geom_hline(yintercept = 0, color = "grey70") +
   geom_point(alpha = 0.5)+
-  geom_smooth(method = "lm")+
-  ggh4x::facet_grid2(Veg~name, scales = "free_y", independent = "y")+
-  theme(legend.position = "none")
+  ylab("Parameter value") +
+  xlab("Temperature treatment (ºC above ambient)")+
+  ggh4x::facet_nested(Type+name~Veg, scales = "free_y", independent = "y",
+                     labeller  = label_parsed)+
+  scale_y_continuous(expand = expansion(mult = c(.1, 0.1)))+
+  theme_bw(base_size = 10)+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"),
+        legend.position = "bottom")
+dev.off()
 ```

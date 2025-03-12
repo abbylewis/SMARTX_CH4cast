@@ -98,4 +98,3 @@ scores_format_all <- scores %>%
 
 write_csv(scores_format_all, "scores_format_all.csv")
 ```
-
