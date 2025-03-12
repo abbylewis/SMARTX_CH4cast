@@ -66,7 +66,7 @@ observations %>%
   mutate(CO2Treat = case_match(CO2Treat,
                                "Amb" ~ "Ambient~CO[2]",
                                "Elev" ~ "Elevated~CO[2]"),
-         Temp = paste0(Temp, "~degree~C"),
+         Temp = paste0("''+", Temp, "~degree~C"),
          Transect = ifelse(Transect > 3, Transect - 3, Transect),
          year=year(datetime),
          yday = as.Date("2024-01-01") + yday(datetime) - 1) %>%
@@ -98,7 +98,7 @@ observations %>%
          CO2Treat = case_match(CO2Treat,
                                "Amb" ~ "Ambient~CO[2]",
                                "Elev" ~ "Elevated~CO[2]"),
-         Temp = paste0(Temp, "~degree*C"),
+         Temp = paste0("''+", Temp, "~degree~C"),
          Transect = ifelse(Transect > 3, Transect - 3, Transect),
          year=year(datetime),
          yday = as.Date("2024-01-01") + yday(datetime) - 1) %>%
@@ -107,7 +107,7 @@ observations %>%
   scale_alpha_manual(values = c(0.3, 1), labels = c("Training years (2017 to 2023)", "Forecast year (2024)"), name = "Year")+
   scale_color_manual(values = c("grey50", "black"), labels = c("Training years (2017 to 2023)", "Forecast year (2024)"), name = "Year")+
   #geom_line(aes(group = paste0(year, site_id)), data = . %>% filter(year == 2024), size = .8)+
-  ggh4x::facet_nested(.~Temp, labeller = label_parsed)+
+  ggh4x::facet_nested(Veg~Temp, labeller = label_parsed)+
   #facet_wrap(~site_id)+
   theme_bw() +
   scale_x_date(date_breaks = "4 month", date_labels = "%b")+
@@ -117,6 +117,7 @@ observations %>%
   theme(strip.background = element_rect(fill = "white",
                                         color = "grey85"),
         axis.title.x = element_blank(),
+        panel.grid.major.x = element_blank(),
         legend.title = element_blank(),
         legend.position = "bottom",
         strip.text = element_text(margin = ggplot2::margin(0.1,0.1,0.1,0.1, "lines")))
@@ -142,7 +143,7 @@ observations %>%
          CO2Treat = case_match(CO2Treat,
                                "Amb" ~ "Ambient~CO[2]",
                                "Elev" ~ "Elevated~CO[2]"),
-         Temp = paste0(Temp, "~degree*C"),
+         Temp = paste0("''+", Temp, "~degree~C"),
          Transect = ifelse(Transect > 3, Transect - 3, Transect),
          year=year(datetime),
          yday = as.Date("2024-01-01") + yday(datetime) - 1) %>%
@@ -580,7 +581,7 @@ dev.off()
 library(rWPE)
 test <- observations %>%
   filter(!year(datetime) == 2016,
-         site_id == 313) %>%
+         site_id == 312) %>%
   complete(site_id, 
            datetime = as.Date(paste0(rep(2017:2024, each = 12), "-", rep(1:12, 8),"-01"))) %>%
   left_join(metadata, by = c("site_id" = "Plot")) %>%
@@ -592,10 +593,144 @@ test %>%
   geom_point()+
   geom_line()
 
-calculate_pe(test %>% arrange(datetime) %>% pull(observation), m = 3, tau = 6)
+calculate_pe(test %>% arrange(datetime) %>% pull(observation), m = 3, tau = 12)
 calculate_pe(sin(1:1000), m = 2*pi)
-calculate_pe(sin(1:2400*(2*pi)/12), m = 12)
+calculate_pe(sin(1:2400*(2*pi)/12) + seq(0,8,length.out = 2400), m = 12)
 plot(sin(1:240*(2*pi)/12), type = "l")
+
+library(hydrostats)
+test_col <- test %>%
+  mutate(Date = format(datetime, "%d/%m/%Y")) %>%
+  ungroup() %>%
+  rename(Q = observation) %>%
+  select(Date, Q) %>%
+  data.frame() %>%
+  ts.format()
+
+Colwells(test_col, s = 5)$P
+
+calc_colwells_p <- function(data, breaks){
+  reformat <- data %>%
+    mutate(Date = format(datetime, "%d/%m/%Y")) %>%
+    ungroup() %>%
+    rename(Q = observation) %>%
+    select(Date, Q) %>%
+    data.frame() %>%
+    ts.format()
+  
+  p <- colwells_asl(reformat, breaks = breaks, indices.only = T)
+  return(p)
+}
+
+#Modified Colwells function
+colwells_asl <- function (flow.ts, fn = "mean", breaks = NULL,
+                          base.binning = 2, base.entropy = 2, 
+                          indices.only = FALSE) {
+  s = length(breaks + 1)
+  fn <- match.fun(fn)
+  flow.ts$month <- factor(strftime(flow.ts[, "Date"], format = "%m"))
+  flow.ts$year <- factor(strftime(flow.ts[, "Date"], format = "%Y"))
+  flow.ts.monthly <- aggregate(Q ~ month + year, flow.ts, fn, 
+                               na.rm = TRUE)
+  flow.ts.monthly$flow.class <- cut(flow.ts.monthly$Q, breaks = breaks, 
+                                    right = FALSE, include.lowest = TRUE)
+  flow.table <- with(flow.ts.monthly, table(flow.class, 
+                                            month))
+  pbreaks <- "see Table"
+  X <- apply(flow.table, 2, sum, na.rm = T)
+  Y <- apply(flow.table, 1, sum, na.rm = T)
+  Z <- sum(flow.table, na.rm = TRUE)
+  HX <- -1 * sum((X/Z) * log(X/Z, base = base.entropy), na.rm = TRUE)
+  HY <- -1 * sum((Y/Z) * log(Y/Z, base = base.entropy), na.rm = TRUE)
+  HXY <- -1 * sum((flow.table/Z) * log(flow.table/Z, base = base.entropy), 
+                  na.rm = TRUE)
+  P <- round(1 - (HXY - HX)/log(s, base = base.binning), 2)
+  C <- round(1 - HY/log(s, base = base.binning), 2)
+  M <- round((HX + HY - HXY)/log(s, base = base.binning), 2)
+  if (indices.only == TRUE) {
+    return(data.frame(P = P, C = C, M = M, CP = C/P, MP = M/P))
+  }
+  else {
+    return(list(breaks = pbreaks, flow.table = flow.table, 
+                P = P, C = C, M = M, CP = C/P, MP = M/P))
+  }
+}
+
+jpeg("../figures/Colwells_metrics.jpg", res = 300, units = "in", width = 3, height = 3.5)
+observations %>%
+  filter(!year(datetime) == 2016) %>%
+  complete(site_id, 
+           datetime = as.Date(paste0(rep(2017:2024, each = 12), "-", 
+                                     rep(1:12, 8),"-01"))) %>%
+  left_join(metadata, by = c("site_id" = "Plot")) %>%
+  filter(CO2Treat == "Amb") %>%
+  mutate(breaks = list(seq(min(observation, na.rm = T), max(observation, na.rm = T), length.out = 11))) %>%
+  group_by(site_id, Temp, CO2Treat, Veg, Transect, breaks) %>%
+  arrange(datetime) %>%
+  select(datetime, observation) %>%
+  nest() %>%
+  reframe(calc_colwells_p(data.frame(data), breaks = unlist(breaks))) %>%
+  pivot_longer(P:MP) %>%
+  filter(name %in% c("C", "M", "P")) %>%
+  mutate(name = factor(name, 
+                       levels = c("C", "M", "P"),
+                       labels = c("Constancy", "Contingency", "Predictability")),
+         Veg = case_match(Veg,
+                          "C3" ~ "C[3]",
+                          "C4" ~ "C[4]")) %>%
+  ggplot(aes(x = as.factor(Temp), 
+             y = value)) +
+  geom_point(size = 0.8) +
+  ggh4x::facet_nested(name~Veg, 
+                      labeller = label_parsed, 
+                      scales = "free", space = "free_x")+
+  ylab("Value")+
+  scale_color_viridis_d()+
+  xlab("Temperature treatment (ºC above ambient)")+
+  theme_bw(base_size = 10)+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"))
+dev.off()
+
+jpeg("../figures/Colwells_metrics_log_intervals.jpg", res = 300, units = "in", width = 3, height = 3.5)
+observations %>%
+  filter(!year(datetime) == 2016) %>%
+  complete(site_id, 
+           datetime = as.Date(paste0(rep(2017:2024, each = 12), "-", 
+                                     rep(1:12, 8),"-01"))) %>%
+  left_join(metadata, by = c("site_id" = "Plot")) %>%
+  filter(CO2Treat == "Amb") %>%
+  mutate(breaks = list(exp(seq(log(1), log(max(reformat$Q, na.rm = T) - min(reformat$Q, na.rm = T) + 1), length.out = 11))),
+         month = month(datetime)) %>%
+  group_by(site_id, Temp, CO2Treat, Veg, Transect, breaks, month) %>%
+  arrange(datetime) %>%
+  mutate(observation = ifelse(is.na(observation), mean(observation), observation)) %>%
+  group_by(site_id, Temp, CO2Treat, Veg, Transect, breaks) %>%
+  select(datetime, observation) %>%
+  nest() %>%
+  reframe(calc_colwells_p(data.frame(data), breaks = unlist(breaks))) %>%
+  pivot_longer(P:MP) %>%
+  filter(name %in% c("C", "M", "MP","P")) %>%
+  mutate(name = factor(name, 
+                       levels = c("C", "M", "MP","P"),
+                       labels = c("Constancy", "Contingency", "MP","Predictability")),
+         Veg = case_match(Veg,
+                          "C3" ~ "C[3]",
+                          "C4" ~ "C[4]")) %>%
+  ggplot(aes(x = Temp, 
+             y = value)) +
+  geom_point(size = 0.8) +
+  geom_smooth(method= "lm")+
+  ggh4x::facet_nested(name~Veg, 
+                      labeller = label_parsed, 
+                      scales = "free", space = "free_x")+
+  ylab("Value")+
+  scale_color_viridis_d()+
+  xlab("Temperature treatment (ºC above ambient)")+
+  theme_bw(base_size = 10)+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"))
+dev.off()
 
 jpeg("../figures/mean and sd.jpg", res = 300, units = "in", width = 4, height = 5)
 observations %>%
@@ -609,7 +744,7 @@ observations %>%
   summarize(mean = mean(observation, na.rm = T),
             sd = sd(observation, na.rm = T),
             cv = sd/mean,
-            WPE = calculate_pe(observation, m = 12, tau = 6)[1],
+            WPE = calculate_pe(observation, m = 3, tau = 12)[1],
             acf1 = acf(observation, 1, plot = F, 
                        na.action = na.pass)$acf[2],
             acf12 = acf(observation, 12, plot = F, 
@@ -698,7 +833,7 @@ scores_format %>%
   mutate(CO2Treat = case_match(CO2Treat,
                                "Amb" ~ "Ambient~CO[2]",
                                "Elev" ~ "Elevated~CO[2]"),
-         Temp = paste0(Temp, "~degree~C"),
+         Temp = paste0("''+", Temp, "~degree~C"),
          Transect = ifelse(Transect > 3, Transect - 3, Transect),
          mod = paste(model_id, site_id))%>%
   ggplot(aes(x = datetime))+
@@ -732,7 +867,7 @@ scores_format %>%
                           "C3" ~ "C[3]",
                           "C4" ~ "C[4]"),
          Transect = ifelse(Transect > 3, Transect - 3, Transect),
-         Temp = paste0(Temp, "~degree~C"),
+         Temp = paste0("''+", Temp, "~degree~C"),
          mod = paste(model_id, site_id))%>%
   ggplot(aes(x = datetime))+
   #geom_ribbon(aes(ymin = mean - sd, ymax = mean + sd, fill = model_id), alpha = 0.1)+

@@ -5,11 +5,22 @@ editor: visual
 ---
 
 ```{r}
+library(tidyverse)
+observations <- read_csv("../L1_target.csv", show_col_types = F) %>%
+  mutate(datetime_observed = datetime,
+         datetime = as.Date(paste(year(datetime), month(datetime), "01", sep = "-"))) %>%
+  group_by(project_id, site_id, datetime, duration, variable) %>%
+  summarize(observation = mean(observation, na.rm = T),
+            dates_observed = list(unique(datetime_observed)),
+            .groups = "drop")
 observations2 <- observations %>%
   mutate(site_id = paste0(substr(site_id, 1, 1), substr(site_id, 3, 3))) %>%
   group_by(project_id, site_id, datetime, duration, variable) %>%
   summarize(observation = mean(observation, na.rm = T),
             .groups = "drop")
+
+metadata <- read_csv(here::here("Raw_data", "plot_treatments.csv")) %>%
+  mutate(Type = "Separate")
 
 noaa_past_mean <- read_csv(here::here("met_downloads",
                                         "monthly_forecasts.csv"),
@@ -29,10 +40,10 @@ importance_df <- function(rf_output){
 pairs(noaa_past_mean)
 
 observations %>%
-  filter(CO2Treat == "Amb") %>%
   left_join(noaa_past_mean) %>%
   mutate(site_id = as.numeric(site_id)) %>%
   left_join(metadata, by = c("site_id" = "Plot")) %>%
+  filter(CO2Treat == "Amb") %>%
   group_by(Veg, Temp, site_id) %>%
   reframe(importance_df(randomForest::randomForest(observation ~ 
                                         Temp_K * 
@@ -58,9 +69,9 @@ arima_df <- function(arima_output){
 }
 
 arima_res <- obs_arima %>%
-  filter(CO2Treat == "Amb") %>%
   mutate(site_id = as.numeric(site_id)) %>%
   left_join(metadata, by = c("site_id" = "Plot")) %>%
+  filter(CO2Treat == "Amb") %>%
   group_by(Veg, Temp, site_id) %>%
   reframe(arima_df(forecast::auto.arima(ts(observation, frequency = 12), D = 1))) %>%
   pivot_longer(sar1:ma2) 
