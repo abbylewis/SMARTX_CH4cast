@@ -39,6 +39,20 @@ observations2 <- observations %>%
 observations_all = observations  %>%
   bind_rows(observations2 %>%
   mutate(site_id = as.numeric(site_id)))
+
+#Load metadata
+metadata <- read_csv(here::here("Raw_data", "plot_treatments.csv")) %>%
+  mutate(Type = "Separate")
+
+#Add averages across reps
+metadata2 <- metadata %>%
+  mutate(Plot = as.numeric(paste0(substr(Plot, 1, 1), substr(Plot, 3, 3)))) %>%
+  select(-Transect) %>%
+  mutate(Type = "Rep_comb") %>%
+  distinct()
+
+#Combine
+metadata_all <- bind_rows(metadata, metadata2)
 ```
 
 ## Score forecasts
