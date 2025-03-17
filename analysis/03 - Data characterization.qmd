@@ -162,20 +162,25 @@ observations %>%
   left_join(metadata, by = c("site_id" = "Plot")) %>%
   group_by(site_id, Temp, CO2Treat, Veg, Transect) %>%
   arrange(datetime) %>%
+  #filter(!is.na(observation),
+  #       observation > 0) %>%
+  #mutate(observation = log(observation)) %>%
   summarize(mean = mean(observation, na.rm = T),
+            median = median(observation, na.rm = T),
             sd = sd(observation, na.rm = T),
-            cv = sd/mean,
-            WPE = calculate_pe(observation, m = 3, tau = 12)[1],
+            IQR = IQR(observation, na.rm = T),
+            stability = mean/sd,
+            #WPE = calculate_pe(observation, m = 3, tau = 12)[1],
             acf1 = acf(observation, 1, plot = F, 
                        na.action = na.pass)$acf[2],
             acf12 = acf(observation, 12, plot = F, 
                         na.action = na.pass)$acf[13],
             n = n(),
             .groups = "drop") %>%
-  pivot_longer(cols = c(mean, sd, WPE, acf1, acf12))%>%
+  pivot_longer(cols = c(mean, median, sd, IQR, stability, acf1, acf12))%>%
   mutate(name = factor(name, 
-                       levels = c("mean", "sd", "WPE", "acf1", "acf12"),
-                       labels = c("Mean", "SD", "WPE", "ACF1", "ACF12")),
+                       levels = c("mean", "median","sd", "IQR","stability", "acf1", "acf12"),
+                       labels = c("Mean", "Median","SD", "IQR","Stability", "ACF1", "ACF12")),
          CO2Treat = case_match(CO2Treat,
                                "Amb" ~ "Ambient~CO[2]",
                                "Elev" ~ "Elevated~CO[2]")) %>%

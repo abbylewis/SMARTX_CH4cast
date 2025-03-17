@@ -73,7 +73,7 @@ forecast_model <- function(site,
   forecast_raw <- as.data.frame(forecast(fit, h = h, level=0.68)) %>% #One SD
     mutate(sigma = `Hi 68`-`Point Forecast`)
   
-  saveRDS(fit, file = here::here("model_fits", paste0(model_id, "_", forecast_date, "_", site, ".rds")))
+  #saveRDS(fit, file = here::here("model_fits", paste0(model_id, "_", forecast_date, "_", site, ".rds")))
   
   forecast = data.frame(project_id = "smartx",
                         model_id = model_id,

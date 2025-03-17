@@ -1,13 +1,29 @@
-# SMARTX CH4 forecasting
+# SMARTX CH~4~cast
 
-Forecasts of CH4 flux from SMARTX experiment at GCReW.
+## Summary
 
-## To add new models
+Forecasts of methane (CH~4~) fluxes from the Salt Marsh Accretion Response to Temperature eXperiment (SMARTX). SMARTX is a long-term whole-ecosystem in situ warming experiment located within the Global Change Research Wetland (GCReW; Edgewater, MD, USA; 38º53′ N, 76º33′ W). Here, we generated six-month-ahead forecasts of CH~4~ fluxes and assessed forecasts throughout 2024.
 
-1.  Copy an existing model folder (I suggest `models/auto.arima` for a time series model or `models/randomForest` for a model with meteorology)
-2.  In that folder, update `forecast_model.R` to include your new model (most of the script should stay the same)
-3.  `new_model_sandbox.R` provides some sandbox code to test your model as you work on development
-4.  Update the the file paths in `rerun_forecasts.R` and `run_forecast.R` to source the correct `forecast_model.R` script
-5.  Use `test_forecast.R` to plot forecasts using this model and make sure everything looks right
-6.  If that worked, you should be pretty much set up! To create automation, go to `.github/workflows` and add your model to one of the `do_prediction_XXX.yml` files
-7.  Push changes and create automation
+## Personnel
+
+-   Abigail Lewis, Smithsonian Environmental Research Center, abigail.sl.lewis\@si.edu
+
+## Repository structure
+
+-   `./Raw_data/`: Unprocessed data inputs, including meteorological forecasts and experimental metadata
+
+-   `./R/`: Utility scripts for forecast generation and scoring
+
+-   `./outputs/`: Forecast outputs. Each file includes one date of forecast generation from a given model. Files with the designation "comb_reps" are forecasts of the mean CH~4~ flux across all plots in a given treatment
+
+-   `./models/`: Code for each of 10 forecast models. Each model-specific subdirectory includes model-specific code `forecast_model.R`, as well as simple wrapper functions to run or re-run forecasts
+
+-   `./met_downloads/`: Formatted meteorological driver data
+
+-   `./analysis/`: All data analysis and figure generation scripts
+
+-   `L1_target.csv`: Formatted CH~4~ flux data
+
+-   `forecast_variables.csv`: Variable description for forecast target variable (CH~4~ flux)
+
+-   
