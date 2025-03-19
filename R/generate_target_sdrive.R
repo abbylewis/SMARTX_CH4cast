@@ -53,7 +53,10 @@ generate_target_sdrive <- function(path){
     group_by(project_id, site_id, datetime, duration, variable) %>%
     summarise(observation = median(observation, na.rm = TRUE), 
               n = n(),
-              .groups = "drop")
+              .groups = "drop") %>%
+    mutate(year = year(datetime)) %>%
+    filter(year >= 2017) %>%
+    select(-year)
   
   write.csv(target, paste0(path,"/L1_target.csv"), row.names = FALSE)
   return(target)
