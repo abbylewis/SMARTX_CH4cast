@@ -151,49 +151,86 @@ scores_format %>%
         legend.text = element_text(margin = ggplot2::margin(t = 0, b = 0)),
         panel.grid.major.x = element_blank())
 dev.off()
+```
 
-summary <- scores_format %>%
-  filter(horizon %in% c(6)) %>%
-  mutate(Treatment = paste(Temp, CO2Treat)) %>%
-  group_by(horizon, site_id, model_id, Temp, year, CO2Treat, Veg, Treatment) %>%
+## Stats
+
+All
+
+```{r}
+#Across all models, forecast performance worsened substantially as temperatures increased: forecast root mean squared error (RMSE) was 5× higher under 5.1 ºC of warming compared to under ambient temperatures (median = 1049 vs 228 µmol/m2/d). 
+summary_all <- scores_format %>%
+  filter(horizon %in% c(6),
+         CO2Treat == "Amb") %>%
+  group_by(horizon, site_id, model_id, Temp, year, CO2Treat, Veg) %>%
   summarize(rmse = Metrics::rmse(observation, mean),
             n = n(),
             .groups = "drop") %>%
   mutate(Temp = as.factor(Temp)) %>%
-  group_by(horizon, model_id, Temp, year, CO2Treat, Veg, Treatment) %>%
-  mutate(model_mean_rmse = mean(rmse, na.rm = T)) %>%
-  group_by(horizon, Temp, year, CO2Treat, Veg, Treatment) %>%
-  summarize(rmse = mean(rmse))
+  group_by(horizon, Temp, year, CO2Treat) %>%
+  summarize(rmse = median(rmse, na.rm = T))
 
-summary$rmse[summary$Veg=="C3" & summary$Temp == 5.1 & summary$CO2Treat == "Amb"]/summary$rmse[summary$Veg=="C3" & summary$Temp == 0 & summary$CO2Treat == "Amb"]
-
-summary$rmse[summary$Veg=="C3" & summary$Temp == 5.1 & summary$CO2Treat == "Elev"]/summary$rmse[summary$Veg=="C3" & summary$Temp == 5.1 & summary$CO2Treat == "Amb"]
-
-summary$rmse[summary$Veg=="C3" & summary$Temp == 0 & summary$CO2Treat == "Elev"]/summary$rmse[summary$Veg=="C3" & summary$Temp == 0 & summary$CO2Treat == "Amb"]
+summary$rmse[summary$Temp == 5.1]/summary$rmse[summary$Temp == 0]
+summary$rmse[summary$Temp == 5.1]
+summary$rmse[summary$Temp == 0]
 ```
 
-## Stats
+By plant community
+
+```{r}
+#These effects were particularly notable in C3 plant communities, where 5.1 °C of warming resulted in 15× higher root mean squared error (RMSE) compared to ambient temperatures (median = 2561 vs. 166 µmol/m2/d).
+summary_c3 <- scores_format %>%
+  filter(horizon %in% c(6),
+         CO2Treat == "Amb", 
+         Veg == "C3") %>%
+  group_by(horizon, site_id, model_id, Temp, year, CO2Treat, Veg) %>%
+  summarize(rmse = Metrics::rmse(observation, mean),
+            n = n(),
+            .groups = "drop") %>%
+  mutate(Temp = as.factor(Temp)) %>%
+  group_by(horizon, Temp, year, CO2Treat, Veg) %>%
+  summarize(rmse = median(rmse, na.rm = T))
+
+summary_c3$rmse[summary_c3$Temp == 5.1]/summary_c3$rmse[summary_c3$Temp == 0]
+summary_c3$rmse[summary_c3$Temp == 5.1]
+summary_c3$rmse[summary_c3$Temp == 0]
+
+#In comparison, forecast RMSE was higher under ambient temperatures and did not significantly increase with experimental warming in C4 plant communities (Figure 2; median RMSE = 555 vs. 440 µmol/m2/d).
+
+summary_c4 <- scores_format %>%
+  filter(horizon %in% c(6),
+         CO2Treat == "Amb", 
+         Veg == "C4") %>%
+  group_by(horizon, site_id, model_id, Temp, year, CO2Treat, Veg) %>%
+  summarize(rmse = Metrics::rmse(observation, mean),
+            n = n(),
+            .groups = "drop") %>%
+  mutate(Temp = as.factor(Temp)) %>%
+  group_by(horizon, Temp, year, CO2Treat, Veg) %>%
+  summarize(rmse = median(rmse, na.rm = T))
+
+summary_c4$rmse[summary_c4$Temp == 5.1]/summary_c4$rmse[summary_c4$Temp == 0]
+summary_c4$rmse[summary_c4$Temp == 5.1]
+summary_c4$rmse[summary_c4$Temp == 0]
+```
+
+LMER
 
 ```{r}
 rmse <- scores_format %>%
   filter(horizon == 6,
          CO2Treat == "Amb") %>%
-  group_by(horizon, site_id, model_id, Temp, year, CO2Treat, Veg) %>%
+  group_by(horizon, site_id, model_id, Temp, year, CO2Treat, Veg, Transect) %>%
   summarize(rmse = log(Metrics::rmse(observation, mean)),
             .groups = "drop")
 
 #C3
-mod_c3 <- lmerTest::lmer(rmse ~ Temp + (1|model_id) + (1|site_id), 
+mod_c3 <- lmerTest::lmer(rmse ~ Temp + (1|model_id) + (1|Transect), 
                       data = rmse[rmse$Veg == "C3", ])
 summary(mod_c3)
 
 #C4
-mod_c4 <- lmerTest::lmer(rmse ~ Temp + (1|model_id) + (1|site_id), 
+mod_c4 <- lmerTest::lmer(rmse ~ Temp + (1|model_id) + (1|Transect), 
                       data = rmse[rmse$Veg == "C4", ])
 summary(mod_c4)
-
-#Both
-mod_rmse_all <- lmerTest::lmer(rmse ~ Temp * Veg + (1|model_id) + (1|site_id), 
-                      data = rmse)
-summary(mod_rmse_all)
 ```
