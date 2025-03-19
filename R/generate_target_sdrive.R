@@ -55,7 +55,8 @@ generate_target_sdrive <- function(path){
               n = n(),
               .groups = "drop") %>%
     mutate(year = year(datetime)) %>%
-    filter(year >= 2017) %>%
+    filter(year >= 2017,
+           year <= 2024) %>%
     select(-year)
   
   write.csv(target, paste0(path,"/L1_target.csv"), row.names = FALSE)
