@@ -25,5 +25,3 @@ Forecasts of methane (CH<sub>4</sub>) fluxes from the Salt Marsh Accretion Respo
 -   `L1_target.csv`: Formatted CH<sub>4</sub> flux data
 
 -   `forecast_variables.csv`: Variable description for forecast target variable (CH<sub>4</sub> flux)
-
-  

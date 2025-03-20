@@ -21,6 +21,7 @@ observations <- read_csv("../L1_target.csv", show_col_types = F) %>%
 #Metadata
 metadata <- read_csv(here::here("Raw_data", "plot_treatments.csv")) %>%
   mutate(Type = "Separate")
+
 ```
 
 Plot observations
@@ -61,18 +62,78 @@ observations %>%
         legend.position = "bottom",
         strip.text = element_text(margin = ggplot2::margin(0.1,0.1,0.1,0.1, "lines")))
 dev.off()
+
+jpeg("../figures/All_years.jpg", width = 5, height = 6, units = "in", res = 300)
+observations %>%
+  left_join(metadata, by = c("site_id"="Plot")) %>%
+  filter(CO2 == 0) %>%
+  group_by(Veg, CO2Treat) %>%
+  mutate(Veg = case_match(Veg,
+                          "C3" ~ "C[3]",
+                          "C4" ~ "C[4]"),
+         CO2Treat = case_match(CO2Treat,
+                               "Amb" ~ "Ambient~CO[2]",
+                               "Elev" ~ "Elevated~CO[2]"),
+         Temp = paste0("''+", Temp, "~degree~C"),
+         Transect = ifelse(Transect > 3, Transect - 3, Transect),
+         year=year(datetime),
+         yday = as.Date("2024-01-01") + yday(datetime) - 1) %>%
+  ggplot(aes(x = yday, y = observation))+
+  geom_line(aes(group = paste0(year, site_id)))+
+  ggh4x::facet_nested(year~Veg+Temp, labeller = label_parsed)+
+  theme_bw() +
+  scale_x_date(date_breaks = "4 month", date_labels = "%b")+
+  scale_y_continuous(n.breaks = 3)+
+  theme_bw(base_size = 10) +
+  ylab(expression(atop(Methane~flux,(µmol/m^{2}/d))))+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"),
+        axis.title.x = element_blank(),
+        panel.grid.major.x = element_blank(),
+        legend.title = element_blank(),
+        legend.position = "bottom",
+        strip.text = element_text(margin = ggplot2::margin(0.1,0.1,0.1,0.1, "lines")))
+dev.off()
 ```
 
 ## Stats
 
 ```{r stats}
+#Averaged across both plant communities, CH4 emissions were 3.3× higher and 2.4× more variable under 5.1 ºC of warming compared to ambient temperatures (median ± IQR = 543 ± 918 in +5.1 ºC and 164 ± 376 in +0 ºC; Figure 1).
+observations %>%
+  left_join(metadata, by = c("site_id"="Plot")) %>%
+  filter(CO2 == 0, 
+         Temp %in% c(0, 5.1)) %>%
+  group_by(Temp) %>%
+  summarize(median = round(median(observation)),
+            iqr = round(IQR(observation))) %>%
+  pivot_longer(c(median, iqr)) %>%
+  pivot_wider(names_from = Temp, values_from = value) %>%
+  mutate(dif = round(`5.1`/`0`, 1))
+
+#For example, in C3 plots the minimum August CH4 flux was slightly lower under 5.1 ºC of warming compared to under ambient temperatures (127 vs. 138 µmol/m2/d), but the maximum observation was 4.5x higher in the experimentally warmed plots (7935 vs. 1758 vs. µmol/m2/d; Figure 2). 
 observations %>%
   left_join(metadata, by = c("site_id"="Plot")) %>%
   filter(month(datetime) == 8,
          Veg == "C3",
-         CO2 == 0) %>%
+         CO2 == 0, 
+         Temp %in% c(0, 5.1)) %>%
   group_by(Temp) %>%
-  summarize(min = min(observation),
-            max = max(observation),
-            sd = sd(observation))
+  summarize(min = round(min(observation)),
+            max = round(max(observation))) %>%
+  pivot_longer(c(min, max)) %>%
+  pivot_wider(names_from = Temp, values_from = value) %>%
+  mutate(dif = round(`5.1`/`0`, 1))
+
+#These differences in the response to warming increased the range of median CH4 fluxes across all 5.1 ºC warmed plots (i.e., both C3 and C4; 372–887 µmol/m2/d) compared to ambient plots (113–267 µmol/m2/d; Figure 1). 
+observations %>%
+  group_by(site_id) %>%
+  summarize(median = median(observation, na.rm = T)) %>%
+  left_join(metadata, by = c("site_id"="Plot")) %>%
+  filter(CO2 == 0, 
+         Temp %in% c(0, 5.1)) %>%
+  group_by(Temp) %>%
+  summarize(min = round(min(median)),
+            max = round(max(median)), 
+            range = max-min)
 ```
