@@ -134,3 +134,15 @@ rmse %>%
         panel.grid.major.x = element_blank())
 dev.off()
 ```
+
+## Stats
+
+```{r}
+rmse %>%
+  ungroup() %>%
+  summarize(mean(rmse))
+
+rmse %>%
+  group_by(Temp, Veg) %>%
+  summarize(mean(rmse))
+```
