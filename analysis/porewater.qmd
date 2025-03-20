@@ -7,7 +7,12 @@ editor: visual
 ```{r}
 library(tidyverse)
 library(readxl)
-porewater <- read_csv("S:/Biogeochemistry/GCREW/4-SMARTX/0-Curated Data/8-Porewater/3-CH4/SMARTX Master Porewater Methane 2023 (published 1-10-2023).csv")
+porewater <- read_csv("S:/Biogeochemistry/GCREW/4-SMARTX/0-Curated Data/8-Porewater/3-CH4/SMARTX Master Porewater Methane 2023 (published 1-10-2023).csv") %>%
+  mutate(Temperature = case_match(Temperature,
+                                  0 ~ 0,
+                                  1 ~ 1.7,
+                                  2 ~ 3.4,
+                                  3 ~ 5.1))
 write_csv(porewater, "../Raw_data/porewater.csv")
 porewater <- read_csv("../Raw_data/porewater.csv")
 
