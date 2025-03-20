@@ -111,8 +111,10 @@ col_calcs %>%
                        labels = c("Constancy", 
                                   "Contingency", 
                                   "Predictability"))) %>%
-  ggplot(aes(x = as.factor(Temp), 
+  ggplot(aes(x = Temp, 
              y = value)) +
+  scale_x_continuous(breaks = c(0, 1.7, 3.4, 5.1)) +
+  geom_smooth(span = 0.95, color = "grey70", fill = "grey70") +
   geom_point(size = 0.8) +
   ggh4x::facet_nested(name~Veg, 
                       labeller = label_parsed, 
@@ -153,13 +155,13 @@ dev.off()
 ## Other statistics
 
 ```{r}
-jpeg("../figures/mean and sd.jpg", res = 300, units = "in", width = 4, height = 5)
+jpeg("../figures/mean and sd.jpg", res = 300, units = "in", width = 3, height = 5)
 observations %>%
-  filter(!year(datetime) == 2016) %>%
   complete(site_id, 
            datetime = as.Date(paste0(rep(2017:2024, each = 12), "-", 
                                      rep(1:12, 8),"-01"))) %>%
   left_join(metadata, by = c("site_id" = "Plot")) %>%
+  filter(CO2 == 0) %>%
   group_by(site_id, Temp, CO2Treat, Veg, Transect) %>%
   arrange(datetime) %>%
   #filter(!is.na(observation),
@@ -181,13 +183,15 @@ observations %>%
   mutate(name = factor(name, 
                        levels = c("mean", "median","sd", "IQR","stability", "acf1", "acf12"),
                        labels = c("Mean", "Median","SD", "IQR","Stability", "ACF1", "ACF12")),
-         CO2Treat = case_match(CO2Treat,
-                               "Amb" ~ "Ambient~CO[2]",
-                               "Elev" ~ "Elevated~CO[2]")) %>%
-  ggplot(aes(x = as.factor(Temp), 
+         Veg = case_match(Veg,
+                          "C3" ~ "C[3]",
+                          "C4" ~ "C[4]")) %>%
+  ggplot(aes(x = Temp, 
              y = value)) +
+  scale_x_continuous(breaks = c(0, 1.7, 3.4, 5.1)) +
+  geom_smooth(span = 0.95, color = "grey70", fill = "grey70") +
   geom_point(size = 0.8) +
-  ggh4x::facet_nested(name~Veg+CO2Treat, 
+  ggh4x::facet_nested(name~Veg, 
                       labeller = label_parsed, 
                       scales = "free", space = "free_x")+
   ylab("Value")+

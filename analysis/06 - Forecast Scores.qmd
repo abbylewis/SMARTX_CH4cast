@@ -69,7 +69,7 @@ scores_format %>%
         panel.grid.major.x = element_blank())
 dev.off()
 
-jpeg("../figures/RMSE_models.jpg", width = 5, height = 4, units = "in", res = 300)
+jpeg("../figures/RMSE_models.jpg", width = 6, height = 4, units = "in", res = 300)
 scores_format %>%
   filter(horizon %in% c(6),
          CO2Treat == "Amb") %>%
