@@ -11,6 +11,7 @@ library(readxl)
 #write_csv(porewater, "../Raw_data/porewater.csv")
 porewater <- read_csv("../Raw_data/porewater.csv")
 
+jpeg("../figures/porewater.jpg", width = 5, height = 3, res = 300, units = "in")
 porewater %>%
   filter(CO2 == 0,
          Depth == 20) %>%
@@ -25,12 +26,8 @@ porewater %>%
          year=year(datetime),
          yday = as.Date("2024-01-01") + yday(datetime) - 1) %>%
   ggplot(aes(x = yday, y = CH4))+
-  geom_line(aes(group = paste0(year, Plot), color = year == 2024, alpha = year == 2024))+
-  scale_alpha_manual(values = c(0.3, 1), labels = c("Training years (2017 to 2023)", "Forecast year (2024)"), name = "Year")+
-  scale_color_manual(values = c("grey50", "black"), labels = c("Training years (2017 to 2023)", "Forecast year (2024)"), name = "Year")+
-  #geom_line(aes(group = paste0(year, site_id)), data = . %>% filter(year == 2024), size = .8)+
+  geom_line(aes(group = paste0(year, Plot)))+
   ggh4x::facet_nested(Veg~Temp, labeller = label_parsed)+
-  #facet_wrap(~site_id)+
   theme_bw() +
   scale_x_date(date_breaks = "2 month", date_labels = "%b")+
   scale_y_continuous(n.breaks = 3)+
@@ -42,4 +39,5 @@ porewater %>%
         legend.title = element_blank(),
         legend.position = "bottom",
         strip.text = element_text(margin = ggplot2::margin(0.1,0.1,0.1,0.1, "lines")))
+dev.off()
 ```

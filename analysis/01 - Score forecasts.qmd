@@ -85,15 +85,15 @@ scores_format_all <- scores %>%
                              model_type),
          model_id = case_match(model_id,
                                "climatology" ~ "Climatology",
-                               "auto.arima" ~ "TS: ARIMA",
-                               "ets" ~ "TS: ETS",
-                               "prophet" ~ "TS: Prophet",
-                               "rEDM" ~ "TS: EDM",
-                               "elasticNet" ~ "TS: Elastic Net",
-                               "randomForest" ~ "ML: RF",
-                               "brnn" ~ "ML: BRNN",
-                               "XGBoost" ~ "ML: XGBoost",
-                               "svm" ~ "ML: SVM")) %>%
+                               "auto.arima" ~ "ARIMA",
+                               "ets" ~ "ETS",
+                               "prophet" ~ "Prophet",
+                               "rEDM" ~ "EDM",
+                               "elasticNet" ~ "Elastic Net",
+                               "randomForest" ~ "RF",
+                               "brnn" ~ "BRNN",
+                               "XGBoost" ~ "XGBoost",
+                               "svm" ~ "SVM")) %>%
   filter(year %in% c(2024))
 
 write_csv(scores_format_all, "scores_format_all.csv")
