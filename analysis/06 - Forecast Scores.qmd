@@ -176,9 +176,9 @@ summary_all <- scores_format %>%
   group_by(horizon, Temp, year, CO2Treat) %>%
   summarize(rmse = median(rmse, na.rm = T))
 
-summary$rmse[summary$Temp == 5.1]/summary$rmse[summary$Temp == 0]
-summary$rmse[summary$Temp == 5.1]
-summary$rmse[summary$Temp == 0]
+summary_all$rmse[summary_all$Temp == 5.1]/summary_all$rmse[summary_all$Temp == 0]
+summary_all$rmse[summary_all$Temp == 5.1]
+summary_all$rmse[summary_all$Temp == 0]
 ```
 
 By plant community
