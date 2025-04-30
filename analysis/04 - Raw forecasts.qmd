@@ -10,14 +10,19 @@ editor: visual
 library(tidyverse)
 
 #Forecasts
-outputs <- list.files("../outputs", full.names = T)
-outputs <- outputs[file.info(outputs)$size > 29] #Filter out empty files
-forecasts <- read_csv(outputs, show_col_types = F)
+scores_format_all <- read_csv("scores_format_all.csv")
+scores_format <- scores_format_all %>%
+  filter(Type == "Separate")
 ```
 
 ## Plot
 
 ```{r}
+desat <- function(cols, sat=0.5) {
+    X <- diag(c(1, sat, 1)) %*% rgb2hsv(col2rgb(cols))
+    hsv(X[1,], X[2,], X[3,])
+}
+
 jpeg("../figures/Forecasts_freey.jpg", width = 7, height = 4, units = "in", res = 300)
 scores_format %>%
   filter(horizon == 6,

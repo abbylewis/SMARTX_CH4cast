@@ -15,6 +15,8 @@ scores <- read_csv("scores.csv", show_col_types = F)
 scores_format_all <- read_csv("scores_format_all.csv")
 ```
 
+## Plot
+
 ```{r}
 desat <- function(cols, sat=0.5) {
     X <- diag(c(1, sat, 1)) %*% rgb2hsv(col2rgb(cols))
@@ -28,7 +30,7 @@ rmse <- scores_format_all %>%
                           "C4" ~ "C[4]")) %>%
   filter(CO2Treat == "Amb",
          horizon == 6) %>%
-  group_by(horizon, model_id, Temp, CO2Treat, Veg, Type) %>%
+  group_by(horizon, model_id, Temp, CO2Treat, Veg, Type, site_id) %>%
   summarize(rmse = Metrics::rmse(observation, mean),
             n = n(),
             .groups = "drop") %>%

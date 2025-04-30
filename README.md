@@ -6,7 +6,7 @@ Forecasts of methane (CH<sub>4</sub>) fluxes from the Salt Marsh Accretion Respo
 
 ## Personnel
 
--   Abigail Lewis, Smithsonian Environmental Research Center, abigail.sl.lewis\@si.edu
+-   Abigail Lewis, Smithsonian Environmental Research Center, abigail.sl.lewis\@gmail.com
 
 ## Repository structure
 

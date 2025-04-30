@@ -1,0 +1,83 @@
+---
+title: "Constancy and contingency conceptual fig"
+author: "Abby Lewis"
+date: "2025-04-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+source("../R/calc_colwells_p.R")
+```
+
+```{r}
+years <- 4
+dates <- 1:365*years
+constancy <- rnorm(dates, sd = 1)
+contingency <- 7*sin(seq(0, 2*pi*years, length.out = length(dates))) + 
+  rnorm(dates, sd = 0.4)
+constancy_contingency <- 2*sin(seq(0,2*pi*years, length.out = length(dates))) + 
+  rnorm(dates, sd = 0.4)
+neither <- 4*rnorm(dates)
+
+all <- data.frame(
+  time = dates,
+  constancy = constancy,
+  contingency = contingency,
+  constancy_contingency = constancy_contingency,
+  neither = neither
+) %>%
+  pivot_longer(cols = -time, 
+               names_to = "type") 
+
+metrics <- all %>%
+  mutate(breaks = list(seq(min(value, na.rm = T), 
+                           max(value, na.rm = T), 
+                           length.out = 11)),
+         datetime = as.Date("2024-01-01") + days(time-1)
+         ) %>%
+  rename(observation = value) %>%
+  group_by(type, breaks) %>%
+  arrange(datetime) %>%
+  select(datetime, observation) %>%
+  nest() %>%
+  reframe(calc_colwells_p(data.frame(data), breaks = unlist(breaks))) %>%
+  pivot_longer(P:MP) %>%
+  filter(name %in% c("C", "M", "P")) %>%
+  mutate(name = factor(name, 
+                       levels = c("C", "M", "P"),
+                       labels = c("Constancy", 
+                                  "Contingency", 
+                                  "Predictability")))
+
+for_plot <- all %>%
+  mutate(constancy = ifelse(grepl("constancy", type), 
+                            "high", "low"),
+         contingency = ifelse(grepl("contingency", type), 
+                              "high", "low"))
+
+jpeg("../figures/Colwells concept.jpg", width = 5, height = 3.5, units = "in", res = 300)
+for_plot %>%
+  mutate(constancy = paste0(constancy, " constancy"),
+         contingency = paste0(contingency, " contingency"),
+         constancy = factor(constancy,
+                            levels = c("low constancy",
+                                       "high constancy")),
+         contingency = factor(contingency,
+                              levels = c("low contingency",
+                                         "high contingency"))) %>%
+  ggplot(aes(x = time, y = value)) +
+  geom_point(size = 0.5)+
+  facet_grid(constancy ~ contingency)+
+  theme_bw(base_size = 15)+
+  scale_x_continuous(breaks = c(1:years*365-90),
+                     labels = paste0("year", 1:years))+
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.text.x = element_text(size = 11),
+        panel.grid = element_blank(),
+        axis.title.x = element_blank())
+dev.off()
+```
+

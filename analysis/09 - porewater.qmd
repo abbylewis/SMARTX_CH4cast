@@ -23,7 +23,7 @@ library(readxl)
 #porewater_all <- bind_rows(porewater, porewater_2024) %>%
 #  filter(!CH4 == -99)
 #write_csv(porewater_all, "../Raw_data/porewater.csv")
-porewater <- read_csv("../Raw_data/porewater.csv")
+porewater_all <- read_csv("../Raw_data/porewater.csv")
 
 jpeg("../figures/porewater.jpg", width = 5, height = 3, res = 300, units = "in")
 porewater_all %>%
