@@ -58,23 +58,13 @@ forecast_model <- function(site,
     12*dif_years
 
   # Fit arima model
-  # If there are any non-positive values, don't consider transformation
-  if(sum(site_target[var] < 0, na.rm=T) > 0){ 
-    fit = auto.arima(ts(site_target[var], frequency = 12), D = 1)
-  } else {
-    # Otherwise, use lambda = "auto"
-    ts <- site_target[var]
-    ts[ts == 0] <- min(ts[!is.na(ts) & ts > 0], na.rm = T)/2 #Deal with 0s before transformation
-    message("Model run with transformation. Min value is ", min(ts, na.rm = T))
-    fit = auto.arima(ts(ts, frequency = 12), D = 1, lambda = "auto")
-  }
+  fit = auto.arima(ts(site_target[var], frequency = 12), D = 1)
   
   # use the model to forecast target variable
   forecast_raw <- as.data.frame(forecast(fit, h = h, level=0.68)) %>% #One SD
     mutate(sigma = `Hi 68`-`Point Forecast`)
   
-  #saveRDS(fit, file = here::here("model_fits", paste0(model_id, "_", forecast_date, "_", site, ".rds")))
-  
+  # format forecast
   forecast = data.frame(project_id = "smartx",
                         model_id = model_id,
                         datetime = max(site_target$datetime) + months(1:h),

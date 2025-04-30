@@ -45,6 +45,7 @@ forecast_model <- function(site,
     return()
   }
 
+  # Create a complete time series of the target variable
   site_target = site_target_raw |>
     complete(datetime = seq.Date(from = min(datetime), 
                                  to = max(datetime),
@@ -76,13 +77,13 @@ forecast_model <- function(site,
   # put in a table
   forecast_dates_df <- tibble(datetime = forecast_dates,
                               month = forecast_month)
-  
   forecast <- target_clim %>%
     mutate(month = as.integer(month)) %>%
     filter(month %in% forecast_month) %>%
     full_join(forecast_dates_df, by = c('month')) %>%
     arrange(site_id, datetime)
   
+  #Ensure we have sufficient data
   if(sum(!is.na(forecast$clim_mean)) == 0 | sum(!is.na(forecast$clim_sd)) == 0){
     message(paste0("Insufficient historical observations at site ", site, 
                    ". Skipping forecasts at this site."))
@@ -97,6 +98,7 @@ forecast_model <- function(site,
     mutate(mu = imputeTS::na_interpolation(x = mean),
            sigma = median(sd, na.rm = TRUE))
   
+  # Format in EFI standard
   forecast = data.frame(project_id = "smartx",
                         model_id = model_id,
                         datetime = max(site_target$datetime) + months(1:h),

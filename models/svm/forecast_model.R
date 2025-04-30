@@ -57,7 +57,7 @@ forecast_model <- function(site,
     return()
     
   } else {
-    # Fit linear model based on past data: target = m * air temp + b
+    # Fit model
     fit <- svm(get(var) ~ 
                         Temp_K * 
                         SolarRad_Wm2 * 

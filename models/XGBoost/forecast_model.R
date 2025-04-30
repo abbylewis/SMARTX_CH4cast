@@ -78,7 +78,7 @@ forecast_model <- function(site,
     
     preds <- predict(fit, newdata = as.matrix(new_data)) #THIS IS THE FORECAST STEP
     
-    # use the linear model to forecast target variable for each ensemble member
+    # use the model to forecast target variable for each ensemble member
     forecast <- noaa_future_monthly |> 
       mutate(site_id = site,
              prediction = preds,

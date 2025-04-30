@@ -2,7 +2,7 @@ source("./models/climatology/forecast_model.R")
 source("./R/rerun_forecasts.R")
 source("./R/generate_tg_forecast.R")
 
-END <- as_date('2025-02-25') # Don't re-run if forecasts have been submitted after this date
+END <- as_date('2025-04-01') # Don't re-run if forecasts have been submitted after this date
 
 rerun_forecasts(forecast_model = forecast_model,
                 model_variables = model_variables,
