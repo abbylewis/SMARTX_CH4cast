@@ -4,6 +4,8 @@ format: html
 editor: visual
 ---
 
+This file analyzes and visualizes time series characteristics across all treatments, including metrics of predictability, contingency, and constancy from Colwell (1974).
+
 ## Load data and packages
 
 ```{r}
@@ -49,7 +51,7 @@ col_calcs <- observations %>%
   select(datetime, observation) %>%
   nest() 
   
-jpeg("../figures/Colwells_metrics.jpg", res = 300, units = "in", width = 3, height = 3.5)
+jpeg("../figures/Figure 4 - Colwells_metrics.jpg", res = 300, units = "in", width = 3, height = 3.5)
 col_calcs %>%
   reframe(calc_colwells_p(data.frame(data), breaks = unlist(breaks))) %>%
   pivot_longer(P:MP) %>%
@@ -74,36 +76,12 @@ col_calcs %>%
   theme(strip.background = element_rect(fill = "white",
                                         color = "grey85"))
 dev.off()
-
-jpeg("../figures/Colwells_metrics_log_intervals.jpg", res = 300, units = "in", width = 3, height = 3.5)
-col_calcs %>%
-  reframe(calc_colwells_p(data.frame(data), breaks = unlist(breaks_log))) %>%
-  pivot_longer(P:MP) %>%
-  filter(name %in% c("C", "M", "P")) %>%
-  mutate(name = factor(name, 
-                       levels = c("C", "M", "P"),
-                       labels = c("Constancy", 
-                                  "Contingency", 
-                                  "Predictability"))) %>%
-  ggplot(aes(x = Temp, 
-             y = value)) +
-  geom_point(size = 0.8) +
-  ggh4x::facet_nested(name~Veg, 
-                      labeller = label_parsed, 
-                      scales = "free", space = "free_x")+
-  ylab("Value")+
-  scale_color_viridis_d()+
-  xlab("Temperature treatment (ºC above ambient)")+
-  theme_bw(base_size = 10)+
-  theme(strip.background = element_rect(fill = "white",
-                                        color = "grey85"))
-dev.off()
 ```
 
 ## Other statistics
 
 ```{r}
-jpeg("../figures/mean and sd.jpg", res = 300, units = "in", width = 3, height = 5)
+jpeg("../figures/Figure S4 - TS characteristics.jpg", res = 300, units = "in", width = 3, height = 5)
 observations %>%
   complete(site_id, 
            datetime = as.Date(paste0(rep(2017:2024, each = 12), "-", 

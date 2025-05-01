@@ -4,6 +4,8 @@ format: html
 editor: visual
 ---
 
+This file analyzes the change in forecast skill that occurs when CH4 fluxes are averaged across all three plots that have the same experimental treatment. Two figures are output for the manuscript and SI.
+
 ## Load data
 
 ```{r}
@@ -23,7 +25,7 @@ desat <- function(cols, sat=0.5) {
     hsv(X[1,], X[2,], X[3,])
 }
 
-jpeg("../figures/RMSE_rep_comb.jpg", width = 5, height = 2.5, units = "in", res = 300)
+jpeg("../figures/Figure 5 - RMSE_rep_comb.jpg", width = 5, height = 2.5, units = "in", res = 300)
 rmse <- scores_format_all %>%
   mutate(Veg = case_match(Veg,
                           "C3" ~ "C[3]",
@@ -66,7 +68,7 @@ rmse %>%
 dev.off()
 
 
-jpeg("../figures/RMSE_ambCO2_comb_reps.jpg", width = 5, height = 2.5, units = "in", res = 300)
+jpeg("../figures/Figure S5 - RMSE_rep_comb.jpg", width = 5, height = 2.5, units = "in", res = 300)
 rmse_raw <- scores_format_all %>%
   filter(horizon %in% c(6),
          CO2Treat == "Amb",
@@ -98,35 +100,6 @@ rmse_raw %>%
   scale_color_manual(values = colorspace::lighten(desat(viridis::viridis(11), 0.3), 0.6))+
   xlab("Temperature treatment (ºC above ambient)")+
   ylab(expression(atop("Error of 6-month forecast",(RMSE*";"~µmol/m^{2}/d))))+
-  theme_bw(base_size = 10)+
-  guides(color = guide_legend(byrow = TRUE, title = "Model"))+
-  theme(strip.background = element_rect(fill = "white",
-                                        color = "grey85"),
-        legend.key.height = unit(0.7, 'lines'),
-        legend.text = element_text(margin = ggplot2::margin(t = 0, b = 0)),
-        panel.grid.major.x = element_blank())
-dev.off()
-
-jpeg("../figures/RMSE_ambCO2_comb_reps_both.jpg", width = 5, height = 4, units = "in", res = 300)
-rmse %>%
-  mutate(type = paste0(expression(atop("Percent change in RMSE","using spatial average")))) %>%
-  rbind(rmse_raw %>% mutate(type = paste0(expression(atop("Error of 6-month forecast",(RMSE*";"~µmol/m^{2}/d)))))) %>%
-  mutate(type = factor(type, levels = rev(unique(type)))) %>%
-  ggplot(aes(x = Temp, 
-             y = rmse)) +
-  geom_hline(aes(yintercept = y), color = "grey50", data = data.frame(y = 0, type = paste0(expression(atop("Percent change in RMSE","using spatial average"))))) +
-  geom_jitter(aes(color = model_id, group = CO2Treat), 
-              width = 0.3,
-              size = 1) +
-  geom_boxplot(outliers = F, alpha = 0, linewidth = 0.3) +
-  ggh4x::facet_nested(type~Veg, 
-                      scales = "free",
-                      labeller = label_parsed)+
-  scale_linetype_manual(values = c("solid", "31"), 
-                     labels = c("Ambient","Elevated"))+
-  scale_color_manual(values = colorspace::lighten(desat(viridis::viridis(11), 0.3), 0.6))+
-  xlab("Temperature treatment (ºC above ambient)")+
-  ylab(expression(atop("Percent change in RMSE","using spatial average")))+
   theme_bw(base_size = 10)+
   guides(color = guide_legend(byrow = TRUE, title = "Model"))+
   theme(strip.background = element_rect(fill = "white",

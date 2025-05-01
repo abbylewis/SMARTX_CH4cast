@@ -4,6 +4,8 @@ format: html
 editor: visual
 ---
 
+This file plots model structure differences between treatments for ARIMA and Random Forest models.
+
 ## Load data and packages
 
 ```{r}
@@ -26,12 +28,12 @@ metadata <- read_csv(here::here("Raw_data", "plot_treatments.csv"), show_col_typ
 
 #Met drivers
 noaa_past_mean <- read_csv(here::here("met_downloads",
-                                        "monthly_forecasts.csv"),
+                                      "monthly_forecasts.csv"),
                              show_col_types = F) %>%
-    filter(horizon == 1) %>%
-    group_by(datetime, variable) %>%
-    summarize(prediction = mean(prediction, na.rm = T), .groups = "drop") %>%
-    pivot_wider(names_from = "variable", values_from = "prediction")
+  filter(horizon == 1) %>%
+  group_by(datetime, variable) %>%
+  summarize(prediction = mean(prediction, na.rm = T), .groups = "drop") %>%
+  pivot_wider(names_from = "variable", values_from = "prediction")
 ```
 
 ## Random forest
@@ -43,7 +45,7 @@ importance_df <- function(rf_output){
   return(out)
 }
 
-png("../figures/RF_drivers.png", res = 300, width = 5, height = 3, units = "in")
+png("../figures/Figure S2 - RF_drivers.png", res = 300, width = 5, height = 3, units = "in")
 observations %>%
   left_join(noaa_past_mean) %>%
   mutate(site_id = as.numeric(site_id)) %>%
@@ -102,7 +104,7 @@ arima_res <- obs_arima %>%
   reframe(arima_df(forecast::auto.arima(ts(observation, frequency = 12), D = 1))) %>%
   pivot_longer(sar1:ma2) 
 
-png("../figures/ARIMA_drivers.png", res = 300, width = 4, height = 6, units = "in")
+png("../figures/Figure S3 - ARIMA_drivers.png", res = 300, width = 4, height = 6, units = "in")
 arima_res %>%
   mutate(#value = ifelse(is.na(value), 0, value),
          Temp = as.factor(Temp),

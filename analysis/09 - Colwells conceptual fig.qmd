@@ -1,12 +1,12 @@
 ---
 title: "Constancy and contingency conceptual fig"
-author: "Abby Lewis"
-date: "2025-04-14"
-output: html_document
+format: html
+editor: visual
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+This file generates a conceptual figure to explain Colwell's metrics of predictability/contingency/constancy (e.g., in presentations, etc.)
+
+```{r}
 library(tidyverse)
 source("../R/calc_colwells_p.R")
 ```
@@ -80,4 +80,3 @@ for_plot %>%
         axis.title.x = element_blank())
 dev.off()
 ```
-

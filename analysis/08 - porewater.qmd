@@ -4,6 +4,10 @@ format: html
 editor: visual
 ---
 
+This file plots porewater CH4 data for Figure S6.
+
+## Load data and packages
+
 ```{r}
 library(tidyverse)
 library(readxl)
@@ -24,8 +28,12 @@ library(readxl)
 #  filter(!CH4 == -99)
 #write_csv(porewater_all, "../Raw_data/porewater.csv")
 porewater_all <- read_csv("../Raw_data/porewater.csv")
+```
 
-jpeg("../figures/porewater.jpg", width = 5, height = 3, res = 300, units = "in")
+## Generate figure
+
+```{r}
+jpeg("../figures/Figure S6 - porewater.jpg", width = 5, height = 3, res = 300, units = "in")
 porewater_all %>%
   filter(CO2 == 0,
          Depth == 20) %>%

@@ -4,6 +4,8 @@ format: html
 editor: visual
 ---
 
+This file loads forecasts and observations, scores all forecasts, and outputs forecast scores ("scores_format_all.csv") for downstream visualization and analysis.
+
 ## Load data and packages
 
 ```{r load}

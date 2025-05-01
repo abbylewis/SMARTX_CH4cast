@@ -4,6 +4,8 @@ format: html
 editor: visual
 ---
 
+This file plots forecast performance by treatment and generates summary statistics for the manuscript.
+
 ## Load data
 
 ```{r}
@@ -31,7 +33,7 @@ grmse <- function(observation, forecast){
   return(grmse)
 }
 
-jpeg("../figures/RMSE_ambCO2.jpg", width = 5, height = 2.5, units = "in", res = 300)
+jpeg("../figures/Figure 2 - RMSE.jpg", width = 5, height = 2.5, units = "in", res = 300)
 scores_format %>%
   filter(horizon %in% c(6),
          CO2Treat == "Amb") %>%
@@ -69,48 +71,7 @@ scores_format %>%
         panel.grid.major.x = element_blank())
 dev.off()
 
-jpeg("../figures/RMSE_models.jpg", width = 6, height = 4, units = "in", res = 300)
-scores_format %>%
-  filter(horizon %in% c(6),
-         CO2Treat == "Amb") %>%
-  mutate(CO2Treat = case_match(CO2Treat,
-                               "Amb" ~ "Ambient~CO[2]",
-                               "Elev" ~ "Elevated~CO[2]"),
-         Temp = paste0("''+", Temp, "~degree~C"),
-         Veg = case_match(Veg,
-                          "C3" ~ "C[3]",
-                          "C4" ~ "C[4]"),
-         Transect = as.factor(ifelse(Transect > 3, Transect - 3, Transect))) %>%
-  group_by(horizon, site_id, model_id, Temp, year, CO2Treat, Veg, Transect) %>%
-  summarize(rmse = Metrics::rmse(observation, mean),
-            n = n(),
-            .groups = "drop") %>%
-  mutate(Temp = as.factor(Temp)) %>%
-  ggplot(aes(y = rmse,
-             x = Transect)) +
-  #geom_point() +
-  #geom_line()+
-  geom_jitter(aes(color = model_id), 
-              width = 0.3,
-              size = 1) +
-  geom_boxplot(outliers = F, alpha = 0, linewidth = 0.3) +
-  ggh4x::facet_nested(Veg~Temp, 
-                      scales = "free", independent = "y",
-                      labeller = label_parsed)+
-  ylab(expression(Error~of~"6-month"~forecast~"("*RMSE*";"~µmol/m^{2}/d*")"))+
-  xlab("Transect")+
-  theme_bw(base_size = 10)+
-  scale_color_manual(values = colorspace::lighten(desat(viridis::viridis(11), 0.3), 0.6),
-                     name = "Model")+
-  theme(strip.background = element_rect(fill = "white",
-                                        color = "grey85"),
-        legend.key.height = unit(0.7, 'lines'),
-        legend.position = "bottom",
-        legend.text = element_text(margin = ggplot2::margin(t = 0, b = 0)),
-        panel.grid.major.x = element_blank())
-dev.off()
-
-jpeg("../figures/nonRMSE_all.jpg", width = 6, height = 8, units = "in", res = 300)
+jpeg("../figures/Figure S1 - nonRMSE_all.jpg", width = 6, height = 8, units = "in", res = 300)
 scores_format %>%
   filter(horizon %in% c(6),
          CO2Treat == "Amb") %>%
@@ -181,7 +142,7 @@ summary_all$rmse[summary_all$Temp == 5.1]
 summary_all$rmse[summary_all$Temp == 0]
 ```
 
-By plant community
+## By plant community
 
 ```{r}
 #These effects were particularly notable in C3 plant communities, where 5.1 °C of warming resulted in 15× higher root mean squared error (RMSE) compared to ambient temperatures (median = 2561 vs. 166 µmol/m2/d).
@@ -220,7 +181,7 @@ summary_c4$rmse[summary_c4$Temp == 5.1]
 summary_c4$rmse[summary_c4$Temp == 0]
 ```
 
-LMER
+## LMER
 
 ```{r}
 rmse <- scores_format %>%

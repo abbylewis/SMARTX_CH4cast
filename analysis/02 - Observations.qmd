@@ -4,6 +4,8 @@ format: html
 editor: visual
 ---
 
+This file deals only with observation data (not forecasts). It generates a figure and calculates summary statistics.
+
 ## Load data and packages
 
 ```{r load}
@@ -24,10 +26,10 @@ metadata <- read_csv(here::here("Raw_data", "plot_treatments.csv")) %>%
 
 ```
 
-Plot observations
+## Plot observations
 
 ```{r plot}
-jpeg("../figures/Observations_amb.jpg", width = 5, height = 3, units = "in", res = 300)
+jpeg("../figures/Figure 1 - Observations.jpg", width = 5, height = 3, units = "in", res = 300)
 observations %>%
   left_join(metadata, by = c("site_id"="Plot")) %>%
   filter(CO2 == 0) %>%
@@ -49,38 +51,6 @@ observations %>%
   #geom_line(aes(group = paste0(year, site_id)), data = . %>% filter(year == 2024), size = .8)+
   ggh4x::facet_nested(Veg~Temp, labeller = label_parsed)+
   #facet_wrap(~site_id)+
-  theme_bw() +
-  scale_x_date(date_breaks = "4 month", date_labels = "%b")+
-  scale_y_continuous(n.breaks = 3)+
-  theme_bw(base_size = 10) +
-  ylab(expression(atop(Methane~flux,(µmol/m^{2}/d))))+
-  theme(strip.background = element_rect(fill = "white",
-                                        color = "grey85"),
-        axis.title.x = element_blank(),
-        panel.grid.major.x = element_blank(),
-        legend.title = element_blank(),
-        legend.position = "bottom",
-        strip.text = element_text(margin = ggplot2::margin(0.1,0.1,0.1,0.1, "lines")))
-dev.off()
-
-jpeg("../figures/All_years.jpg", width = 5, height = 6, units = "in", res = 300)
-observations %>%
-  left_join(metadata, by = c("site_id"="Plot")) %>%
-  filter(CO2 == 0) %>%
-  group_by(Veg, CO2Treat) %>%
-  mutate(Veg = case_match(Veg,
-                          "C3" ~ "C[3]",
-                          "C4" ~ "C[4]"),
-         CO2Treat = case_match(CO2Treat,
-                               "Amb" ~ "Ambient~CO[2]",
-                               "Elev" ~ "Elevated~CO[2]"),
-         Temp = paste0("''+", Temp, "~degree~C"),
-         Transect = ifelse(Transect > 3, Transect - 3, Transect),
-         year=year(datetime),
-         yday = as.Date("2024-01-01") + yday(datetime) - 1) %>%
-  ggplot(aes(x = yday, y = observation))+
-  geom_line(aes(group = paste0(year, site_id)))+
-  ggh4x::facet_nested(year~Veg+Temp, labeller = label_parsed)+
   theme_bw() +
   scale_x_date(date_breaks = "4 month", date_labels = "%b")+
   scale_y_continuous(n.breaks = 3)+

@@ -4,6 +4,8 @@ format: html
 editor: visual
 ---
 
+This file plots six-month forecasts in comparison with observations across 2024.
+
 ## Load data
 
 ```{r}
@@ -23,7 +25,7 @@ desat <- function(cols, sat=0.5) {
     hsv(X[1,], X[2,], X[3,])
 }
 
-jpeg("../figures/Forecasts_freey.jpg", width = 7, height = 4, units = "in", res = 300)
+jpeg("../figures/Figure 3 - Forecasts_freey.jpg", width = 7, height = 4, units = "in", res = 300)
 scores_format %>%
   filter(horizon == 6,
          CO2 == 0)%>%
