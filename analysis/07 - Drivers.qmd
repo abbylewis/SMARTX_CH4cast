@@ -101,11 +101,11 @@ arima_res <- obs_arima %>%
   left_join(metadata, by = c("site_id" = "Plot")) %>%
   filter(CO2Treat == "Amb") %>%
   group_by(Veg, Temp, site_id, Transect) %>%
-  reframe(arima_df(forecast::auto.arima(ts(observation, frequency = 12), D = 1))) %>%
-  pivot_longer(sar1:ma2) 
+  reframe(arima_df(forecast::auto.arima(ts(observation, frequency = 12), D = 1))) 
 
 png("../figures/Figure S3 - ARIMA_drivers.png", res = 300, width = 4, height = 6, units = "in")
 arima_res %>%
+  pivot_longer(sar1:drift) %>%
   mutate(#value = ifelse(is.na(value), 0, value),
          Temp = as.factor(Temp),
          Transect = as.factor(ifelse(Transect > 3, Transect - 3, Transect)),

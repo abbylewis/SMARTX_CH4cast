@@ -81,7 +81,7 @@ dev.off()
 ## Other statistics
 
 ```{r}
-jpeg("../figures/Figure S4 - TS characteristics.jpg", res = 300, units = "in", width = 3, height = 5)
+jpeg("../figures/Figure S4 - TS characteristics.jpg", res = 300, units = "in", width = 4, height = 5)
 observations %>%
   complete(site_id, 
            datetime = as.Date(paste0(rep(2017:2024, each = 12), "-", 
@@ -110,12 +110,13 @@ observations %>%
                        labels = c("Mean", "Median","SD", "IQR","Stability", "ACF1", "ACF12")),
          Veg = case_match(Veg,
                           "C3" ~ "C[3]",
-                          "C4" ~ "C[4]")) %>%
+                          "C4" ~ "C[4]"),
+         Transect = as.factor(ifelse(Transect > 3, Transect - 3, Transect))) %>%
   ggplot(aes(x = Temp, 
              y = value)) +
   scale_x_continuous(breaks = c(0, 1.7, 3.4, 5.1)) +
   geom_smooth(span = 0.95, color = "grey70", fill = "grey70") +
-  geom_point(size = 0.8) +
+  geom_point(size = 0.8, aes(shape = Transect)) +
   ggh4x::facet_nested(name~Veg, 
                       labeller = label_parsed, 
                       scales = "free", space = "free_x")+
@@ -124,6 +125,7 @@ observations %>%
   xlab("Temperature treatment (ºC above ambient)")+
   theme_bw(base_size = 10)+
   theme(strip.background = element_rect(fill = "white",
-                                        color = "grey85"))
+                                        color = "grey85"),
+        panel.spacing.x = unit(1, "lines"))
 dev.off()
 ```

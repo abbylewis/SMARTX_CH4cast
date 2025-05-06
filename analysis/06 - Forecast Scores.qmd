@@ -121,8 +121,6 @@ dev.off()
 
 ## Stats
 
-All
-
 ```{r}
 #Across all models, forecast performance worsened substantially as temperatures increased: forecast root mean squared error (RMSE) was 5× higher under 5.1 ºC of warming compared to under ambient temperatures (median = 1049 vs 228 µmol/m2/d). 
 summary_all <- scores_format %>%
