@@ -117,6 +117,47 @@ scores_format %>%
         legend.text = element_text(margin = ggplot2::margin(t = 0, b = 0)),
         panel.grid.major.x = element_blank())
 dev.off()
+
+jpeg("../figures/Other- log score.jpg", width = 5, height = 2.5, units = "in", res = 300)
+scores_format %>%
+  filter(horizon %in% c(6),
+         CO2Treat == "Amb") %>%
+  mutate(Temp = as.factor(Temp),
+         Veg = case_match(Veg,
+                          "C3" ~ "C[3]",
+                          "C4" ~ "C[4]")) %>%
+  group_by(horizon, site_id, model_id, Temp, year, CO2Treat, Veg) %>%
+  summarize(ign = mean(logs, na.rm = T),
+            .groups = "drop") %>%
+  pivot_longer(c(ign)) %>%
+  mutate(name = factor(name, levels = c("ign"),
+                       label = c("Ignorance")))%>%
+  filter(name == "Ignorance") %>%
+  ggplot(aes(x = Temp, 
+             y = value)) +
+  geom_jitter(aes(color = model_id, group = CO2Treat), 
+              width = 0.3,
+              size = 1) +
+  geom_boxplot(outliers = F, alpha = 0, linewidth = 0.3) +
+  ggh4x::facet_nested(.~Veg, 
+                      space = "free_x", scales = "free",
+                      labeller = label_parsed)+
+  scale_linetype_manual(values = c("solid", "31"), 
+                     labels = c("Ambient","Elevated"))+
+  scale_color_manual(values = colorspace::lighten(desat(viridis::viridis(10), 0.3), 0.6))+
+  scale_y_log10()+
+  xlab("Temperature treatment\n(ºC above ambient)")+
+  ylab("Log score")+
+  theme_bw(base_size = 10)+
+  guides(color = guide_legend(byrow = TRUE, title = "Model"),
+         linetype = guide_legend(byrow = TRUE,
+                     title = expression(CO[2]~Treatment)))+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"),
+        legend.key.height = unit(0.7, 'lines'),
+        legend.text = element_text(margin = ggplot2::margin(t = 0, b = 0)),
+        panel.grid.major.x = element_blank())
+dev.off()
 ```
 
 ## Stats
