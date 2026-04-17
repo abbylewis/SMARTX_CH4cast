@@ -29,7 +29,7 @@ metadata <- read_csv(here::here("Raw_data", "plot_treatments.csv")) %>%
 ## Plot observations
 
 ```{r plot}
-jpeg("../figures/Figure 1 - Observations.jpg", width = 5, height = 3, units = "in", res = 300)
+tiff("../figures/Figure 1 - Observations.tif", width = 5, height = 3, units = "in", res = 600)
 observations %>%
   left_join(metadata, by = c("site_id"="Plot")) %>%
   filter(CO2 == 0) %>%
@@ -55,7 +55,7 @@ observations %>%
   scale_x_date(date_breaks = "4 month", date_labels = "%b")+
   scale_y_continuous(n.breaks = 3)+
   theme_bw(base_size = 10) +
-  ylab(expression(atop(Methane~flux,(µmol/m^{2}/d))))+
+  ylab(expression(atop(Methane~flux,(µmol~m^{-2}~d^-1))))+
   theme(strip.background = element_rect(fill = "white",
                                         color = "grey85"),
         axis.title.x = element_blank(),

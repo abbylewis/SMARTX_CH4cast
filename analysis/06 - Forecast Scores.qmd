@@ -32,7 +32,7 @@ grmse <- function(observation, forecast){
   return(grmse)
 }
 
-jpeg("../figures/Figure 2 - RMSE.jpg", width = 5, height = 2.5, units = "in", res = 300)
+tiff("../figures/Figure 2 - RMSE.tif", width = 5, height = 2.5, units = "in", res = 600)
 scores_format %>%
   filter(horizon %in% c(6),
          CO2Treat == "Amb") %>%
@@ -60,7 +60,7 @@ scores_format %>%
                      labels = c("Ambient","Elevated"))+
   scale_color_manual(values = colorspace::lighten(desat(viridis::viridis(11), 0.3), 0.5))+
   xlab("Temperature treatment (ºC above ambient)")+
-  ylab(expression(atop("Error of 6-month forecast",(RMSE*";"~µmol/m^{2}/d))))+
+  ylab(expression(atop("Error of 6-month forecast",(RMSE*";"~µmol~m^{-2}~d^-1))))+
   theme_bw(base_size = 10)+
   guides(color = guide_legend(byrow = TRUE, title = "Model"))+
   theme(strip.background = element_rect(fill = "white",
@@ -152,6 +152,36 @@ scores_format %>%
   guides(color = guide_legend(byrow = TRUE, title = "Model"),
          linetype = guide_legend(byrow = TRUE,
                      title = expression(CO[2]~Treatment)))+
+  theme(strip.background = element_rect(fill = "white",
+                                        color = "grey85"),
+        legend.key.height = unit(0.7, 'lines'),
+        legend.text = element_text(margin = ggplot2::margin(t = 0, b = 0)),
+        panel.grid.major.x = element_blank())
+dev.off()
+
+jpeg("../figures/EXTRA Figure 2 - simple.jpg", width = 3, height = 2, units = "in", res = 300)
+scores_format %>%
+  filter(horizon %in% c(6),
+         CO2Treat == "Amb",
+         Veg == "C3") %>%
+  group_by(horizon, site_id, model_id, Temp, year, CO2Treat, Veg) %>%
+  summarize(rmse = Metrics::rmse(observation, mean),
+            n = n(),
+            .groups = "drop") %>%
+  mutate(Temp = as.factor(Temp)) %>%
+  ggplot(aes(x = Temp, 
+             y = rmse)) +
+  geom_jitter(aes(color = model_id, group = CO2Treat), 
+              width = 0.3,
+              size = 1) +
+  geom_boxplot(outliers = F, alpha = 0, linewidth = 0.3) +
+  scale_linetype_manual(values = c("solid", "31"), 
+                     labels = c("Ambient","Elevated"))+
+  scale_color_manual(values = colorspace::lighten(desat(viridis::viridis(11), 0.3), 0.5))+
+  xlab("Treatment (ºC above ambient)")+
+  ylab(expression(RMSE~"("*µmol~m^{-2}~d^-1*")"))+
+  theme_bw(base_size = 10)+
+  guides(color = guide_legend(byrow = TRUE, title = "Model"))+
   theme(strip.background = element_rect(fill = "white",
                                         color = "grey85"),
         legend.key.height = unit(0.7, 'lines'),

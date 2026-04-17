@@ -24,7 +24,7 @@ desat <- function(cols, sat=0.5) {
     hsv(X[1,], X[2,], X[3,])
 }
 
-jpeg("../figures/Figure 5 - RMSE_rep_comb.jpg", width = 5, height = 2.5, units = "in", res = 300)
+tiff("../figures/Figure 5 - RMSE_rep_comb.tif", width = 5, height = 2.5, units = "in", res = 600)
 rmse <- scores_format_all %>%
   mutate(Veg = case_match(Veg,
                           "C3" ~ "C[3]",

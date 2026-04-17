@@ -51,7 +51,7 @@ col_calcs <- observations %>%
   select(datetime, observation) %>%
   nest() 
   
-jpeg("../figures/Figure 4 - Colwells_metrics.jpg", res = 300, units = "in", width = 3, height = 3.5)
+tiff("../figures/Figure 4 - Colwells_metrics.tif", res = 600, units = "in", width = 3, height = 3.5)
 col_calcs %>%
   reframe(calc_colwells_p(data.frame(data), breaks = unlist(breaks))) %>%
   pivot_longer(P:MP) %>%

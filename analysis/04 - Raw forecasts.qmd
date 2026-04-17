@@ -25,7 +25,7 @@ desat <- function(cols, sat=0.5) {
     hsv(X[1,], X[2,], X[3,])
 }
 
-jpeg("../figures/Figure 3 - Forecasts_freey.jpg", width = 7, height = 4, units = "in", res = 300)
+tiff("../figures/Figure 3 - Forecasts_freey.tif", width = 7, height = 4, units = "in", res = 600)
 scores_format %>%
   filter(horizon == 6,
          CO2 == 0)%>%
@@ -49,7 +49,7 @@ scores_format %>%
   scale_x_date(date_breaks = "4 month", date_labels = "%b")+
   scale_y_continuous(n.breaks = 3)+
   theme_bw(base_size = 10) +
-  ylab(expression(atop("Methane flux",(µmol/m^{2}/d))))+
+  ylab(expression(atop("Methane flux",(µmol~m^{-2}~d^-1))))+
   theme(strip.background = element_rect(fill = "white",
                                         color = "grey85"),
         axis.title.x = element_blank(),
